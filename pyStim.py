@@ -36,7 +36,7 @@ trainTime=5
 varCount=13
 sNum=1
 # describes the "data" report from teensy
-dataCount=6
+dataCount=8
 
 
 # 
@@ -59,6 +59,8 @@ pAmpB=int((pulseAmpV_B/3.3)*4095)
 tm=[]
 v1=[]
 v2=[]
+rv1=[]
+rv2=[]
 tC=[]
 
 current_milli_time = lambda: int(round(time.time() * 1000))
@@ -181,12 +183,14 @@ while n<=tDur:
 		tm.append(sR[1])
 		v1.append(sR[3])
 		v2.append(sR[4])
+		rv1.append(sR[5])
+		rv2.append(sR[6])
 		tC.append(sR[2])
 		n=n+1
 
 eT=current_milli_time();
 
-while s==2:
+while s==2:	
 	sR=comObj.readline().strip().decode()
 	sR=sR.split(',')
 	if len(sR)==varCount and sR[0]=='vars':
@@ -197,7 +201,7 @@ while s==2:
 print('eT: {}'.format(eT-bT))
 print('end_{}'.format(s))
 tCo=[]
-saveStreams='tm','v1','v2','tC'
+saveStreams='tm','v1','v2','rv1','rv2','tC'
 for x in range(0,len(saveStreams)):
 	exec('tCo={}'.format(saveStreams[x]))
 	if x==0:
