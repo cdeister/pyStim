@@ -6,43 +6,66 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib import pyplot as plt
 import time
-import datetime as DT
+import datetime
 import random
-import struct
 import sys
 import os
 import pandas as pd
-import scipy.stats as stats
 
 comObj = serial.Serial('/dev/cu.usbmodem2828431',115200)
 
 # **** edit these if you want
 # for now, they can not be 0!
-dwellTime=0.1
-pulseTime=0.005
-trainTime=15
-nPulses=12
-pAmp=1000
+
+dwellTimeA=0.195
+pulseTimeA=0.005 
+nPulsesA=10  
+pulseAmpV_A=1   # in V (0-3.3V)
+baselineTimeA=2.2
+
+dwellTimeB=0.195
+pulseTimeB=0.005
+nPulsesB=40
+pulseAmpV_B=1 
+baselineTimeB=2
+
+trainTime=5
 
 # Don't mess with this stuff
-varCount=8
+# describes the "vars" report from teensy
+varCount=13
+sNum=1
+# describes the "data" report from teensy
 dataCount=6
-sNum=6
 
-#
-sRate=5000
+
+# 
+sRate=2000
 tDur=trainTime*sRate
-iPInt=dwellTime*sRate
-pDur=pulseTime*sRate
+
+bDurA=baselineTimeA*sRate
+iPIntA=dwellTimeA*sRate
+pDurA=pulseTimeA*sRate
+pAmpA=int((pulseAmpV_A/3.3)*4095)
+
+
+bDurB=baselineTimeB*sRate
+iPIntB=dwellTimeB*sRate
+pDurB=pulseTimeB*sRate
+pAmpB=int((pulseAmpV_B/3.3)*4095)
+
+
 
 tm=[]
 v1=[]
 v2=[]
 tC=[]
 
+current_milli_time = lambda: int(round(time.time() * 1000))
 
 # send to state 0 to reset variables
 resetVars=0
+print('d1')
 while resetVars==0:
 	sR=comObj.readline().strip().decode()
 	sR=sR.split(',')
@@ -50,30 +73,34 @@ while resetVars==0:
 		s=int(sR[sNum])
 		if (s != 0):
 			print('a')
-			print(sR[sNum])
-			comObj.write('s0>'.encode('utf-8'))
+			comObj.write('a0>'.encode('utf-8'))
 			time.sleep(0.005)
 		elif s == 0:
 			print('b')
 			resetVars=1
 
-print('reset')
-trialSet=0
-
-
+print('d2')
 # send to state 1
 while s != 1:
-	comObj.write('s1>'.encode('utf-8'))
-	time.sleep(0.005)
+	comObj.write('a1>'.encode('utf-8'))
+	time.sleep(0.025)
 	sR=comObj.readline().strip().decode()
 	sR=sR.split(',')
 	if len(sR)==varCount and sR[0]=='vars':
 		s=int(sR[sNum])
-		aR=int(sR[1])
-		pR=int(sR[2])
-		tR=int(sR[3])
-		nR=int(sR[4])
-		ssR=int(sR[5])
+
+		bSt=int(sR[2])
+		cSt=int(sR[3])
+		dSt=int(sR[4])
+		eSt=int(sR[5])
+		fSt=int(sR[6])
+		gSt=int(sR[7])
+		hSt=int(sR[8])
+		iSt=int(sR[9])
+		jSt=int(sR[10])
+		kSt=int(sR[11])
+		lSt=int(sR[12])
+		
 
 
 if s==1:
@@ -81,46 +108,63 @@ if s==1:
 	sR=sR.split(',')
 	if len(sR)==varCount and sR[0]=='vars':
 		s=int(sR[sNum])
-		aR=int(sR[1])
-		pR=int(sR[2])
-		tR=int(sR[3])
-		nR=int(sR[4])
-		ssR=int(sR[5])
 
-		print('aa_{}_{}_{}_{}_{}_{}'.format(s,aR,pR,tR,nR,ssR))
-
-	if aR==0:
-		comObj.write('a{}>'.format(pAmp).encode('utf-8'))
-		time.sleep(0.005)
-	
-	if pR==0:
-		comObj.write('p{}>'.format(pDur).encode('utf-8'))
-		time.sleep(0.005)
-
-	if tR==0:
-		comObj.write('t{}>'.format(tDur).encode('utf-8'))
-		time.sleep(0.005)
-	if nR==0:
-		comObj.write('n{}>'.format(nPulses).encode('utf-8'))
-		time.sleep(0.005)
-
-	if ssR==0:
-		comObj.write('r{}>'.format(iPInt).encode('utf-8'))
-		time.sleep(0.005)
-
+		bSt=int(sR[2])
+		cSt=int(sR[3])
+		dSt=int(sR[4])
+		eSt=int(sR[5])
+		fSt=int(sR[6])
+		gSt=int(sR[7])
+		hSt=int(sR[8])
+		iSt=int(sR[9])
+		jSt=int(sR[10])
+		kSt=int(sR[11])
+		lSt=int(sR[12])
 		
 
 
+	if bSt==0:
+		comObj.write('b{}>'.format(pAmpA).encode('utf-8'))
+		time.sleep(0.025)
+	
+	if cSt==0:
+		comObj.write('c{}>'.format(pDurA).encode('utf-8'))
+		time.sleep(0.025)
+	if dSt==0:
+		comObj.write('d{}>'.format(iPIntA).encode('utf-8'))
+		time.sleep(0.025)
+	if eSt==0:
+		comObj.write('e{}>'.format(nPulsesA).encode('utf-8'))
+		time.sleep(0.025)
+	if fSt==0:
+		comObj.write('f{}>'.format(bDurA).encode('utf-8'))
+		time.sleep(0.025)
+	if gSt==0:
+		comObj.write('g{}>'.format(tDur).encode('utf-8'))
+		time.sleep(0.025)
+	if hSt==0:
+		comObj.write('h{}>'.format(pAmpB).encode('utf-8'))
+		time.sleep(0.025)
+	if iSt==0:
+		comObj.write('i{}>'.format(pDurB).encode('utf-8'))
+		time.sleep(0.025)
+	if jSt==0:
+		comObj.write('j{}>'.format(iPIntB).encode('utf-8'))
+		time.sleep(0.025)
+	if kSt==0:
+		comObj.write('k{}>'.format(nPulsesB).encode('utf-8'))
+		time.sleep(0.025)
+	if lSt==0:
+		comObj.write('l{}>'.format(bDurB).encode('utf-8'))
+		time.sleep(0.025)
 
+		
 print('cc_{}'.format(s))
+bT=current_milli_time();
 
-current_milli_time = lambda: int(round(time.time() * 10000))
-
-
-				
 while s!=2:
 	comObj.flush()
-	comObj.write('s2>'.encode('utf-8'))
+	comObj.write('a2>'.encode('utf-8'))
 	sR=comObj.readline().strip().decode()
 	sR=sR.split(',')
 	if len(sR)==varCount and sR[0]=='vars':
@@ -128,19 +172,17 @@ while s!=2:
 		
 
 n=1
-bT=current_milli_time();
 while n<=tDur:
 	
-	comObj.flush()
+	# comObj.flush()
 	sR=comObj.readline().strip().decode()
 	sR=sR.split(',')
 	if len(sR)==dataCount and sR[0]=='data' :
-		tm.append(sR[3])
-		v1.append(sR[1])
-		v2.append(sR[2])
-		tC.append(sR[4])
+		tm.append(sR[1])
+		v1.append(sR[3])
+		v2.append(sR[4])
+		tC.append(sR[2])
 		n=n+1
-		# print('r_{}_{}_{}'.format(s,n,sR[1]))
 
 eT=current_milli_time();
 
@@ -149,7 +191,7 @@ while s==2:
 	sR=sR.split(',')
 	if len(sR)==varCount and sR[0]=='vars':
 		s=int(sR[sNum])
-		comObj.write('s0>'.encode('utf-8'))
+		comObj.write('a0>'.encode('utf-8'))
 
 
 print('eT: {}'.format(eT-bT))
@@ -167,4 +209,4 @@ for x in range(0,len(saveStreams)):
 rf.to_csv('test.csv')
 comObj.close()
 print('done')
-quit()
+sys.exit(0)
