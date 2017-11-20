@@ -2,7 +2,7 @@
 
 A simple python/teensy script combo that enables trial-based hardware timed analog and digital I/O.
 
-Current functionality is limited only by the lack of a user interface. However, in its infant state it can be used for two channel analog input/output (pulse train only for now) with a digital output trigger.
+Current functionality is limited only by the lack of a user interface. However, in its infant state it can be used for two channel analog input/output (pulse train only for now) with a digital output trigger. All parameters of the pulse trains can be set in the pyStim.py script. There is a block of paramaters that are highlighted via comments as the place to edit train parameters. 
 
 Channel A is DAC0 (A21)
 
