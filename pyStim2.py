@@ -35,6 +35,7 @@ comObj = serial.Serial('/dev/cu.usbmodem2405571',115200)
 sRate=1000  # samples/sec (this is set by the teensy, we just need to know it)
 
 # pulse train A
+animalID='testMouse'
 dwellTimeA=0.100  # in S
 pulseTimeA=0.100  # in S
 nPulsesA=10  	  
@@ -107,10 +108,11 @@ while tNum<=totalTrials:
 		exec('{}=[]'.format(trialStores[x]))
 
 
+
 	
 	pST=current_milli_time();
 	
-	trialStores
+	
 
 	varHeader='b','c','d','e','f','g','h','i','j','k','l'	
 	varStates='bSt','cSt','dSt','eSt','fSt','gSt','hSt','iSt','jSt','kSt','lSt'
@@ -207,30 +209,30 @@ while tNum<=totalTrials:
 	print('eT: {}'.format(eT-bT))
 	
 	tCo=[]
-	saveStreams='tm','v1','v2','rv1','rv2','tC'
-	for x in range(0,len(saveStreams)):
-		exec('tCo={}'.format(saveStreams[x]))
+	trialStores='tm','v1','v2','rv1','rv2','tC'
+	for x in range(0,len(trialStores)):
+		exec('tCo={}'.format(trialStores[x]))
 		if x==0:
-			rf=pd.DataFrame({'{}'.format(saveStreams[x]):tCo})
+			rf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
 		elif x != 0:
-			tf=pd.DataFrame({'{}'.format(saveStreams[x]):tCo})
+			tf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
 			rf=pd.concat([rf,tf],axis=1)
 
 	rf.to_csv('test_{}.csv'.format(tNum))
 	trialTime.append(eT-bT)
-	print('trial_{} done; pre took {}'.format(tNum,bT-pST))
+	print('{}_trial_{} done; pre took {}'.format(animalID,tNum,bT-pST))
 	tNum=tNum+1
 
 # end the session
 tCo=[]
-saveStreams=[]
-saveStreams='trialTime','chanA_stimAmps'
-for x in range(0,len(saveStreams)):
-	exec('tCo={}'.format(saveStreams[x]))
+
+
+for x in range(0,len(trialStores)):
+	exec('tCo={}'.format(trialStores[x]))
 	if x==0:
-		rf=pd.DataFrame({'{}'.format(saveStreams[x]):tCo})
+		rf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
 	elif x != 0:
-		tf=pd.DataFrame({'{}'.format(saveStreams[x]):tCo})
+		tf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
 		rf=pd.concat([rf,tf],axis=1)
 rf.to_csv('session_{}.csv'.format(1))
 
