@@ -83,10 +83,10 @@ const int dacReadB = A8;
 
 // feedback LEDs
 const int pulseA_LED = 14;
-const int pulseB_LED = 13;
+const int pulseB_LED = 6;
 
 // triggers
-const int scopeTrigger = 6;
+const int scopeTrigger = 13;
 
 
 void setup() {

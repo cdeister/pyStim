@@ -36,6 +36,7 @@ sRate=1000  # samples/sec (this is set by the teensy, we just need to know it)
 
 # pulse train A
 animalID='testMouse'
+
 dwellTimeA=0.100  # in S
 pulseTimeA=0.100  # in S
 nPulsesA=10  	  
@@ -50,7 +51,7 @@ pulseAmpV_B=10  # in V (0-3.3V)
 baselineTimeB=2 # in S
 
 trainTime=5 # in S
-totalTrials=1
+totalTrials=10
 
 # Don't mess with this stuff
 # describes the "vars" report from teensy
@@ -94,7 +95,7 @@ preTime=[]
 
 tNum=1
 
-sessionStores='tm','v1','v2','rv1','rv2','tC'
+sessionStores='trialTime','preTime'
 for x in range(0,len(sessionStores)):
 		exec('{}=[]'.format(sessionStores[x]))
 
@@ -194,7 +195,6 @@ while tNum<=totalTrials:
 			rv2.append(sR[5])
 			tC.append(sR[6])
 			n=n+1
-			print('v1/v2: {}_{}'.format(sR[6],sR[7]))
 
 	eT=current_milli_time();
 
@@ -226,15 +226,14 @@ while tNum<=totalTrials:
 # end the session
 tCo=[]
 
-
-for x in range(0,len(trialStores)):
-	exec('tCo={}'.format(trialStores[x]))
+for x in range(0,len(sessionStores)):
+	exec('tCo={}'.format(sessionStores[x]))
 	if x==0:
-		rf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
+		rf=pd.DataFrame({'{}'.format(sessionStores[x]):tCo})
 	elif x != 0:
-		tf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
+		tf=pd.DataFrame({'{}'.format(sessionStores[x]):tCo})
 		rf=pd.concat([rf,tf],axis=1)
-rf.to_csv('session_{}.csv'.format(1))
+rf.to_csv('{}_session_{}.csv'.format(animalID,1))
 
 # clean up
 comObj.close()
