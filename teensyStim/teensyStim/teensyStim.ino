@@ -10,7 +10,7 @@
 #include <FlexiTimer2.h>
 
 // session params
-int sampsPerSecond = 1000; // samples per second
+int sampsPerSecond = 2000; // samples per second
 float evalEverySample = 1.0; // number of times to poll the stim funtion
 int trigTime = 0.01 * sampsPerSecond;
 
@@ -82,15 +82,15 @@ const int dacReadA = A9;
 const int dacReadB = A8;
 
 // feedback LEDs
-const int pulseA_LED = 14;
-const int pulseB_LED = 6;
+const int pulseA_LED = 13;
+const int pulseB_LED = 14;
 
 // triggers
-const int scopeTrigger = 13;
+const int scopeTrigger = 6;
 
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(19200);
   delay(2);
   analogWriteResolution(12);
   pinMode(pulseA_LED, OUTPUT);

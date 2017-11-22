@@ -1,4 +1,4 @@
-# pyStim v0.75
+# pyStim v0.8
 # _________________
 # Works with microcontrollers that have hardward DACs, like the Teensy 3 line.
 # It is intended to be used with a Teensy3.5/3.6, both of which have 2 analog outs.
@@ -24,7 +24,10 @@ import sys
 import os
 import pandas as pd
 
-comObj = serial.Serial('/dev/cu.usbmodem2405571',115200)
+baudRate=19200
+boardNum=2540591
+
+comObj = serial.Serial('/dev/cu.usbmodem{}'.format(2540591),baudRate)
 
 #******************************
 # **** edit these if you want
@@ -32,14 +35,17 @@ comObj = serial.Serial('/dev/cu.usbmodem2405571',115200)
 
 
 # session
-sRate=1000  # samples/sec (this is set by the teensy, we just need to know it)
+sRate=2000  # samples/sec 
+# (this is set by the teensy, we just need to know it to scale right)
 
 # pulse train A
+animalID='testMouse'
+
 dwellTimeA=0.100  # in S
 pulseTimeA=0.100  # in S
 nPulsesA=10  	  
 pulseAmpV_A=10   # in V (0-3.3V)
-baselineTimeA=0.5 # in S
+baselineTimeA=3 # in S
 
 # pulse train B
 dwellTimeB=0.100 # in S
@@ -49,7 +55,14 @@ pulseAmpV_B=10  # in V (0-3.3V)
 baselineTimeB=2 # in S
 
 trainTime=5 # in S
-totalTrials=1
+totalTrials=10
+
+serDelay=0.005
+
+
+#*************************************
+#*************************************
+#*************************************
 
 # Don't mess with this stuff
 # describes the "vars" report from teensy
@@ -83,22 +96,18 @@ iPIntB=dwellTimeB*sRate
 pDurB=pulseTimeB*sRate
 pAmpB=int((pulseAmpV_B/3.3)*4095)
 
-print(pAmpA)
-print(pAmpB)
-
-
 trialTime=[]
 preTime=[]
 
-
 tNum=1
 
-sessionStores='tm','v1','v2','rv1','rv2','tC'
+sessionStores='trialTime','preTime'
 for x in range(0,len(sessionStores)):
 		exec('{}=[]'.format(sessionStores[x]))
 
 
 current_milli_time = lambda: int(round(time.time() * 1000))
+curVarState = lambda x: x==0 
 
 while tNum<=totalTrials:
 	trialStores='tm','v1','v2','rv1','rv2','tC'
@@ -107,14 +116,12 @@ while tNum<=totalTrials:
 		exec('{}=[]'.format(trialStores[x]))
 
 
-	
 	pST=current_milli_time();
 	
-	trialStores
-
 	varHeader='b','c','d','e','f','g','h','i','j','k','l'	
 	varStates='bSt','cSt','dSt','eSt','fSt','gSt','hSt','iSt','jSt','kSt','lSt'
-	varNames='pAmpA','pDurA','iPIntA','nPulsesA','bDurA','tDur','pAmpB','pDurB','iPIntB','nPulsesB','bDurB'
+	varNames='pAmpA','pDurA','iPIntA','nPulsesA','bDurA','tDur',\
+	'pAmpB','pDurB','iPIntB','nPulsesB','bDurB'
 	varNums=[2,3,4,5,6,7,8,9,10,11,12]
 
 	# send to state 0 to reset variables
@@ -156,15 +163,13 @@ while tNum<=totalTrials:
 				exec('{}=sR[{}]'.format(varStates[x],varNums[x]))
 		
 		
-		serDelay=0.025
-		curVarState = lambda x: x==0 
+
 		for x in range(0,len(varStates)):
 			a=eval('curVarState({})'.format(varStates[x]))
 			if a==0:
 				tVal=eval(varNames[x])
 				comObj.write('{}{}>'.format(varHeader[x],tVal).encode('utf-8'))
 				time.sleep(serDelay)
-				print('{}{}>'.format(varHeader[x],varNames[x]))
 			
 	print('queued_{}'.format(tNum))
 	bT=current_milli_time();
@@ -185,14 +190,9 @@ while tNum<=totalTrials:
 		sR=comObj.readline().strip().decode()
 		sR=sR.split(',')
 		if len(sR)==dataCount and sR[0]=='data' :
-			tm.append(sR[1])
-			v1.append(sR[2])
-			v2.append(sR[3])
-			rv1.append(sR[4])
-			rv2.append(sR[5])
-			tC.append(sR[6])
+			for x in range(0,len(trialStores)):
+				exec('{}.append(sR[{}])'.format(trialStores[x],trialStoresIDs[x]))
 			n=n+1
-			print('v1/v2: {}_{}'.format(sR[6],sR[7]))
 
 	eT=current_milli_time();
 
@@ -203,37 +203,39 @@ while tNum<=totalTrials:
 			s=int(sR[sNum])
 			comObj.write('a0>'.encode('utf-8'))
 
-
-	print('eT: {}'.format(eT-bT))
+	teTime=eT-bT
+	tpTime=bT-pST
+	print('eT: {}'.format(teTime))
+	print('pT: {}'.format(tpTime))
 	
 	tCo=[]
-	saveStreams='tm','v1','v2','rv1','rv2','tC'
-	for x in range(0,len(saveStreams)):
-		exec('tCo={}'.format(saveStreams[x]))
+	for x in range(0,len(trialStores)):
+		exec('tCo={}'.format(trialStores[x]))
 		if x==0:
-			rf=pd.DataFrame({'{}'.format(saveStreams[x]):tCo})
+			rf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
 		elif x != 0:
-			tf=pd.DataFrame({'{}'.format(saveStreams[x]):tCo})
+			tf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
 			rf=pd.concat([rf,tf],axis=1)
 
-	rf.to_csv('test_{}.csv'.format(tNum))
-	trialTime.append(eT-bT)
-	print('trial_{} done; pre took {}'.format(tNum,bT-pST))
+	rf.to_csv('{}_trial_{} done; pre took {}'.format(animalID,tNum,tpTime))
+	trialTime.append(teTime)
+	preTime.append(tpTime)
+	print('{}_trial_{} done; pre took {}'.format(animalID,tNum,tpTime))
 	tNum=tNum+1
 
 # end the session
 tCo=[]
-saveStreams=[]
-saveStreams='trialTime','chanA_stimAmps'
-for x in range(0,len(saveStreams)):
-	exec('tCo={}'.format(saveStreams[x]))
-	if x==0:
-		rf=pd.DataFrame({'{}'.format(saveStreams[x]):tCo})
-	elif x != 0:
-		tf=pd.DataFrame({'{}'.format(saveStreams[x]):tCo})
-		rf=pd.concat([rf,tf],axis=1)
-rf.to_csv('session_{}.csv'.format(1))
 
+for x in range(0,len(sessionStores)):
+	exec('tCo={}'.format(sessionStores[x]))
+	if x==0:
+		rf=pd.DataFrame({'{}'.format(sessionStores[x]):tCo})
+	elif x != 0:
+		tf=pd.DataFrame({'{}'.format(sessionStores[x]):tCo})
+		rf=pd.concat([rf,tf],axis=1)
+rf.to_csv('{}_session_{}.csv'.format(animalID,1))
+print(np.mean(trialTime))
+print(np.mean(preTime))
 # clean up
 comObj.close()
 print('done')
