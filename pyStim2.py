@@ -24,15 +24,15 @@ class psVariables:
 		'sampsToPlot':1000,'comPath':"/dev/cu.usbmodem2762721",\
 		'baudRate':19200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':8,\
 		'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':8,\
-		'serDelay':0.005,'tNum':1,'tDur':5}
+		'serDelay':0.005,'tNum':1,'tDur':5000}
 		exec('self.{}=sesVarD'.format(idString))
 
 		psVariables.dictToPandas(self,sesVarD,idString)
 
 	def setPulseTrainVars(self,idString):
 
-		ptVarD = {'dwellTime':0.100,'pulseTime':0.100,'nPulses':10,\
-		'pulseAmpV':3.3,'baselineTime':3}
+		ptVarD = {'dwellTime':100,'pulseTime':100,'nPulses':10,\
+		'pulseAmpV':3.3,'baselineTime':2000}
 		exec('self.{}=ptVarD'.format(idString))
 
 		psVariables.dictToPandas(self,ptVarD,idString)
@@ -106,11 +106,13 @@ class pyStim:
 		psData.initSessionData(self)
 		psVariables.setSessionVars(self,'sesVarD')
 		
-		self.pulseTrainTrial()
+		while self.sesVarD['tNum']<=10:
+			self.pulseTrainTrial()
+			# psData.saveTrialData(self)
+			self.sesVarD['tNum']=self.sesVarD['tNum']+1
+			print(self.sesVarD['tNum'])
 		pyStim.exportAnimalMeta(self)
 		self.teensy.close()
-		print('done')
-
 
 	def readSerialData(self,comObj,headerString,headerCount):
 		sR=comObj.readline().strip().decode()
@@ -165,6 +167,7 @@ class pyStim:
 		current_milli_time = lambda: int(round(time.time() * 1000))
 		curVarState = lambda x: x==0 
 
+		pST=current_milli_time()
 		# send to state 0 to reset variables
 		while resetVars==0:
 			tR,tU=self.readSerialData(comObj,'vars',varCount)
@@ -200,24 +203,25 @@ class pyStim:
 					tVal=eval(varNames[x])
 					comObj.write('{}{}>'.format(varHeader[x],tVal).encode('utf-8'))
 					time.sleep(serDelay)
-				print(a)
 		print(tDur)
 		print('queued_{}'.format(tNum))
 		bT=current_milli_time();
 
 		while s!=2:
+			
 			comObj.flush()
 			comObj.write('a2>'.encode('utf-8'))
 			tR,tU=self.readSerialData(comObj,'vars',varCount)
 			if tU:
 				s=int(tR[sNum])
 
+		print(tDur)
 		n=1
 		while n<=tDur:
 			tR,tU=self.readSerialData(comObj,'data',dataCount)
 			if tU:
 				for x in range(0,len(psData.trialStores)):
-					exec('{}.append(tR[{}])'.format(psData.trialStores[x],psData.trialStoresIDs[x]))
+					exec('psData.{}.append(tR[{}])'.format(psData.trialStores[x],psData.trialStoresIDs[x]))
 				n=n+1
 
 		eT=current_milli_time();
@@ -235,8 +239,6 @@ class pyStim:
 		print('eT: {}'.format(self.teTime))
 		print('pT: {}'.format(self.tpTime))
 		print('{}_trial_{} done; pre took {}'.format(animalID,tNum,self.tpTime))
-		psData.saveTrialData(self)
-		self.sesVarD['tNum']=tNum+1
 
 
 
