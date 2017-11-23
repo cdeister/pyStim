@@ -2,7 +2,8 @@
 # _________________
 # Works with microcontrollers that have hardward DACs, like the Teensy 3 line.
 # It is intended to be used with a Teensy3.5/3.6, both of which have 2 analog outs.
-# All configuration is script based at this point. See the edit block below for variables.
+# All configuration is script based at this point. 
+#See the edit block below for variables.
 # GUI Coming. The GUI will unlock other capabilities.
 # You need to load 'teensyStim.ino' onto your microcontroller.
 
@@ -27,7 +28,7 @@ import pandas as pd
 baudRate=19200
 boardNum=2540591
 
-comObj = serial.Serial('/dev/cu.usbmodem{}'.format(2540591),baudRate)
+comObj = serial.Serial('/dev/cu.usbmodem{}'.format(boardNum),baudRate)
 
 #******************************
 # **** edit these if you want
@@ -35,7 +36,7 @@ comObj = serial.Serial('/dev/cu.usbmodem{}'.format(2540591),baudRate)
 
 
 # session
-sRate=2000  # samples/sec 
+sRate=1000  # samples/sec 
 # (this is set by the teensy, we just need to know it to scale right)
 
 # pulse train A
@@ -55,7 +56,7 @@ pulseAmpV_B=10  # in V (0-3.3V)
 baselineTimeB=2 # in S
 
 trainTime=5 # in S
-totalTrials=10
+totalTrials=3
 
 serDelay=0.005
 
@@ -63,6 +64,9 @@ serDelay=0.005
 #*************************************
 #*************************************
 #*************************************
+
+pClrs={'right':'#D9220D','cBlue':'#33A4F3','cPurp':'#6515D9',\
+'cOrange':'#F7961D','left':'cornflowerblue','cGreen':'#29AA03'}
 
 # Don't mess with this stuff
 # describes the "vars" report from teensy
@@ -73,7 +77,15 @@ dataCount=8
 
 
 # Scale things (mostly convert time to samples)
+dacBitDepth=12
+dacMinVal=0
+dacMaxVal=3.3
+dacBound=(2^dacBitDepth)-1
 
+pAmpA=int((pulseAmpV_A/dacMaxVal)*dacBound)
+pAmpB=int((pulseAmpV_B/dacMaxVal)*dacBound)
+
+# fix extreme values ask for on the DAC lines.
 if pulseAmpV_A<0:
 	abs(pulseAmpV_A)
 if pulseAmpV_B<0:
@@ -83,23 +95,20 @@ if pulseAmpV_A>3.3:
 if pulseAmpV_B>3.3:
 	pulseAmpV_B=3.3
 
+# Analog Input Scalars
+adcBitDepth=8
+adcBound=(2^adcBitDepth)-1
+
+# Time/Duration Bits
 tDur=trainTime*sRate
 
 bDurA=baselineTimeA*sRate
 iPIntA=dwellTimeA*sRate
 pDurA=pulseTimeA*sRate
-pAmpA=int((pulseAmpV_A/3.3)*4095)
-
 
 bDurB=baselineTimeB*sRate
 iPIntB=dwellTimeB*sRate
 pDurB=pulseTimeB*sRate
-pAmpB=int((pulseAmpV_B/3.3)*4095)
-
-trialTime=[]
-preTime=[]
-
-tNum=1
 
 sessionStores='trialTime','preTime'
 for x in range(0,len(sessionStores)):
@@ -109,6 +118,10 @@ for x in range(0,len(sessionStores)):
 current_milli_time = lambda: int(round(time.time() * 1000))
 curVarState = lambda x: x==0 
 
+
+
+
+tNum=1
 while tNum<=totalTrials:
 	trialStores='tm','v1','v2','rv1','rv2','tC'
 	trialStoresIDs=[1,2,3,4,5,6]
@@ -217,7 +230,7 @@ while tNum<=totalTrials:
 			tf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
 			rf=pd.concat([rf,tf],axis=1)
 
-	rf.to_csv('{}_trial_{} done; pre took {}'.format(animalID,tNum,tpTime))
+	rf.to_csv('{}_trial_{}.csv'.format(animalID,tNum))
 	trialTime.append(teTime)
 	preTime.append(tpTime)
 	print('{}_trial_{} done; pre took {}'.format(animalID,tNum,tpTime))
@@ -233,6 +246,8 @@ for x in range(0,len(sessionStores)):
 	elif x != 0:
 		tf=pd.DataFrame({'{}'.format(sessionStores[x]):tCo})
 		rf=pd.concat([rf,tf],axis=1)
+
+
 rf.to_csv('{}_session_{}.csv'.format(animalID,1))
 print(np.mean(trialTime))
 print(np.mean(preTime))
