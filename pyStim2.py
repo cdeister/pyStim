@@ -200,7 +200,8 @@ class pyStim:
 					tVal=eval(varNames[x])
 					comObj.write('{}{}>'.format(varHeader[x],tVal).encode('utf-8'))
 					time.sleep(serDelay)
-
+				print(a)
+		print(tDur)
 		print('queued_{}'.format(tNum))
 		bT=current_milli_time();
 
