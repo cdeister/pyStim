@@ -1,9 +1,8 @@
-# pyStim v0.8
+# pyStim v0.9
 # _________________
 # Works with microcontrollers that have hardward DACs, like the Teensy 3 line.
 # It is intended to be used with a Teensy3.5/3.6, both of which have 2 analog outs.
-# All configuration is script based at this point. See the edit block below for variables.
-# GUI Coming. The GUI will unlock other capabilities.
+#
 # You need to load 'teensyStim.ino' onto your microcontroller.
 
 # Chris Deister - cdeister@brown.edu
@@ -20,223 +19,235 @@ from matplotlib import pyplot as plt
 import time
 import datetime
 import random
+import struct
 import sys
 import os
 import pandas as pd
+import scipy.stats as stats
 
-baudRate=19200
-boardNum=2540591
+class psVariables:
 
-comObj = serial.Serial('/dev/cu.usbmodem{}'.format(2540591),baudRate)
+	def setSessionVars(self,idString):
+		
+		sesVarD = {'currentSession':1,'dirPath':"/",\
+		'animalID':"an1",'uiUpdateSamps':100,'sRate':1000,\
+		'lickThresholdStrValB':550,'totalTrials':150,\
+		'sampsToPlot':1000,'comPath':"/dev/cu.usbmodem2762721",\
+		'baudRate':19200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':8,\
+		'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':8,\
+		'serDelay':0.005,'tNum':1,'tDur':5000}
+		exec('self.{}=sesVarD'.format(idString))
 
-#******************************
-# **** edit these if you want
-#******************************
-
-
-# session
-sRate=2000  # samples/sec 
-# (this is set by the teensy, we just need to know it to scale right)
-
-# pulse train A
-animalID='testMouse'
-
-dwellTimeA=0.100  # in S
-pulseTimeA=0.100  # in S
-nPulsesA=10  	  
-pulseAmpV_A=10   # in V (0-3.3V)
-baselineTimeA=3 # in S
-
-# pulse train B
-dwellTimeB=0.100 # in S
-pulseTimeB=0.100 # in S
-nPulsesB=10
-pulseAmpV_B=10  # in V (0-3.3V)
-baselineTimeB=2 # in S
-
-trainTime=5 # in S
-totalTrials=10
-
-serDelay=0.005
+		psVariables.dictToPandas(self,sesVarD,idString)
 
 
-#*************************************
-#*************************************
-#*************************************
+	def setPulseTrainVars(self,idString):
 
-# Don't mess with this stuff
-# describes the "vars" report from teensy
-varCount=13
-sNum=1
-# describes the "data" report from teensy
-dataCount=8
+		ptVarD = {'dwellTime':100,'pulseTime':100,'nPulses':10,\
+		'pulseAmpV':3.3,'baselineTime':2000}
+		exec('self.{}=ptVarD'.format(idString))
 
+		psVariables.dictToPandas(self,ptVarD,idString)
 
-# Scale things (mostly convert time to samples)
+	def dictToPandas(self,dictName,idString):
 
-if pulseAmpV_A<0:
-	abs(pulseAmpV_A)
-if pulseAmpV_B<0:
-	abs(pulseAmpV_B)
-if pulseAmpV_A>3.3:
-	pulseAmpV_A=3.3
-if pulseAmpV_B>3.3:
-	pulseAmpV_B=3.3
+		tLab=[]
+		tVal=[]
+		for key in list(dictName.keys()):
+			tLab.append(key)
+			tVal.append(dictName[key])
+		exec('self.{}_Bindings=pd.Series(tVal,index=tLab)'.format(idString))
 
-tDur=trainTime*sRate
+	def pandasToDict(self,pdName,dictName):
+		varIt=0
+		for k in list(pdName.index):
+			a=pdName[varIt]
+			dictName[k]=a
+			varIt=varIt+1
 
-bDurA=baselineTimeA*sRate
-iPIntA=dwellTimeA*sRate
-pDurA=pulseTimeA*sRate
-pAmpA=int((pulseAmpV_A/3.3)*4095)
+class psData:
 
+	def initSessionData(self):
+		psData.sessionStores='trialTime','preTime'
+		for x in range(0,len(psData.sessionStores)):
+			exec('{}=[]'.format(psData.sessionStores[x]))
 
-bDurB=baselineTimeB*sRate
-iPIntB=dwellTimeB*sRate
-pDurB=pulseTimeB*sRate
-pAmpB=int((pulseAmpV_B/3.3)*4095)
+	def initTrialData(self):
+		psData.trialStores='tm','v1','v2','rv1','rv2','tC'
+		psData.trialStoresIDs=[1,2,3,4,5,6]
+		for x in range(0,len(psData.trialStores)): 
+			exec('psData.{}=[]'.format(psData.trialStores[x]))
 
-trialTime=[]
-preTime=[]
+	def initTeensyStateData(self): # hacky
 
-tNum=1
+		psData.varHeader='b','c','d','e','f','g','h','i','j','k','l'	
+		psData.varStates='bSt','cSt','dSt','eSt','fSt','gSt','hSt','iSt',\
+		'jSt','kSt','lSt'
+		psData.varNames='pAmpA','pDurA','iPIntA','nPulsesA','bDurA','tDur',\
+		'pAmpB','pDurB','iPIntB','nPulsesB','bDurB'
+		psData.varNums=[2,3,4,5,6,7,8,9,10,11,12]
 
-sessionStores='trialTime','preTime'
-for x in range(0,len(sessionStores)):
-		exec('{}=[]'.format(sessionStores[x]))
+	def saveTrialData(self):
+		animalID=self.sesVarD['animalID']
+		tNum=self.sesVarD['tNum']
+		tCo=[]
+		for x in range(0,len(trialStores)):
+			exec('tCo={}'.format(trialStores[x]))
+			if x==0:
+				rf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
+			elif x != 0:
+				tf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
+				rf=pd.concat([rf,tf],axis=1)
 
+		rf.to_csv('{}_trial_{}.csv'.format(animalID,tNum))
+		self.trialTime.append(self.teTime)
+		self.preTime.append(self.tpTime)
+		print('{}_trial_{} done; pre took {}'.format(animalID,tNum,tpTime))
 
-current_milli_time = lambda: int(round(time.time() * 1000))
-curVarState = lambda x: x==0 
+class pyStim:
 
-while tNum<=totalTrials:
-	trialStores='tm','v1','v2','rv1','rv2','tC'
-	trialStoresIDs=[1,2,3,4,5,6]
-	for x in range(0,len(trialStores)): 
-		exec('{}=[]'.format(trialStores[x]))
+	def __init__(self,master):
+		baudRate=19200
+		boardNum=2540591
 
+		self.teensy = serial.Serial('/dev/cu.usbmodem{}'.format(boardNum),baudRate)
+		self.master = master
+		self.frame = Frame(self.master)
+		root.wm_geometry("+0+0")
+		psData.initSessionData(self)
+		psVariables.setSessionVars(self,'sesVarD')
+		
+		while self.sesVarD['tNum']<=10:
+			self.pulseTrainTrial()
+			# psData.saveTrialData(self)
+			self.sesVarD['tNum']=self.sesVarD['tNum']+1
+		pyStim.exportAnimalMeta(self)
+		self.teensy.close()
 
-	pST=current_milli_time();
-	
-	varHeader='b','c','d','e','f','g','h','i','j','k','l'	
-	varStates='bSt','cSt','dSt','eSt','fSt','gSt','hSt','iSt','jSt','kSt','lSt'
-	varNames='pAmpA','pDurA','iPIntA','nPulsesA','bDurA','tDur',\
-	'pAmpB','pDurB','iPIntB','nPulsesB','bDurB'
-	varNums=[2,3,4,5,6,7,8,9,10,11,12]
-
-	# send to state 0 to reset variables
-	resetVars=0
-	while resetVars==0:
+	def readSerialData(self,comObj,headerString,headerCount):
 		sR=comObj.readline().strip().decode()
 		sR=sR.split(',')
-		if len(sR)==varCount and sR[0]=='vars':
-			s=int(sR[sNum])
-			if (s != 0):
+		if len(sR)==headerCount and sR[0]==headerString:
+			newData=1
+		else:
+			newData=0
+		return sR,newData
+
+
+	def exportAnimalMeta(self):
+		self.sesVarD_Bindings.to_csv('sesVars.csv')
+		self.ptVarD_chan0_Bindings.to_csv('ptAVar.csv')
+		self.ptVarD_chan1_Bindings.to_csv('ptBVar.csv')
+
+	def pulseTrainTrial(self):
+		psVariables.setPulseTrainVars(self,'ptVarD_chan0')
+		psVariables.setPulseTrainVars(self,'ptVarD_chan1')
+		psData.initTeensyStateData(self)
+		psData.initTrialData(self)
+
+		# ugly hack
+		pAmpA=self.ptVarD_chan0['pulseAmpV']
+		pDurA=self.ptVarD_chan0['pulseTime']
+		iPIntA=self.ptVarD_chan0['dwellTime']
+		nPulsesA=self.ptVarD_chan0['nPulses']
+		bDurA=self.ptVarD_chan0['baselineTime']
+		pAmpB=self.ptVarD_chan1['pulseAmpV']
+		pDurB=self.ptVarD_chan1['pulseTime']
+		iPIntB=self.ptVarD_chan1['dwellTime']
+		nPulsesB=self.ptVarD_chan1['nPulses']
+		bDurB=self.ptVarD_chan1['baselineTime']
+		tDur=self.sesVarD['tDur']
+
+		# local vars
+		sNum=self.sesVarD['sNum']
+		varStates=psData.varStates
+		varNums=psData.varNums
+		varNames=psData.varNames
+		varHeader=psData.varHeader
+		varCount=self.sesVarD['varCount']
+		dataCount=self.sesVarD['dataCount']
+		serDelay=self.sesVarD['serDelay']
+		tDur=self.sesVarD['tDur']
+		tNum=self.sesVarD['tNum']
+		resetVars=0
+		comObj=self.teensy
+		animalID=self.sesVarD['animalID']
+
+
+		current_milli_time = lambda: int(round(time.time() * 1000))
+		curVarState = lambda x: x==0 
+
+		pST=current_milli_time()
+		# send to state 0 to reset variables
+		while resetVars==0:
+			tR,tU=self.readSerialData(comObj,'vars',varCount)
+			if tU:
+				s=int(tR[sNum])
+				if (s != 0):
+					self.teensy.write('a0>'.encode('utf-8'))
+					time.sleep(0.005)
+				elif s == 0:
+					resetVars=1
+
+		# send to state 1
+		while s != 1:
+			comObj.write('a1>'.encode('utf-8'))
+			time.sleep(0.025)
+			tR,tU=self.readSerialData(comObj,'vars',varCount)
+			if tU:
+				s=int(tR[sNum])
+				for x in range(0,len(varStates)):
+					exec('{}=tR[{}]'.format(varStates[x],varNums[x]))
+
+		if s==1:
+			tR,tU=self.readSerialData(comObj,'vars',varCount)
+			if tU:
+				s=int(tR[sNum])
+				for x in range(0,len(varStates)):
+					exec('{}=tR[{}]'.format(varStates[x],varNums[x]))
+		
+			for x in range(0,len(varStates)):
+				a=eval('curVarState({})'.format(varStates[x]))
+				if a==0:
+					tVal=eval(varNames[x])
+					comObj.write('{}{}>'.format(varHeader[x],tVal).encode('utf-8'))
+					time.sleep(serDelay)
+		
+		print('go')
+		bT=current_milli_time();
+		while s!=2:
+			
+			comObj.flush()
+			comObj.write('a2>'.encode('utf-8'))
+			tR,tU=self.readSerialData(comObj,'vars',varCount)
+			if tU:
+				s=int(tR[sNum])
+
+		n=1
+		while n<=tDur:
+			tR,tU=self.readSerialData(comObj,'data',dataCount)
+			if tU:
+				for x in range(0,len(psData.trialStores)):
+					exec('psData.{}.append(tR[{}])'.format(psData.trialStores[x],psData.trialStoresIDs[x]))
+				n=n+1
+
+		eT=current_milli_time();
+
+		while s!=2:
+			comObj.flush()
+			comObj.write('a2>'.encode('utf-8'))
+			tR,tU=self.readSerialData(comObj,'vars',varCount)
+			if tU:
+				s=int(tR[sNum])
 				comObj.write('a0>'.encode('utf-8'))
-				time.sleep(0.005)
-			elif s == 0:
-				
-				resetVars=1
 
-	# send to state 1
-	while s != 1:
-		comObj.write('a1>'.encode('utf-8'))
-		time.sleep(0.025)
-		sR=comObj.readline().strip().decode()
-		sR=sR.split(',')
-		if len(sR)==varCount and sR[0]=='vars':
-
-			s=int(sR[sNum])
-			for x in range(0,len(varStates)):
-				exec('{}=sR[{}]'.format(varStates[x],varNums[x]))
-
-			
+		self.teTime=eT-bT
+		self.tpTime=bT-pST
+		print('{}_trial_{} done; pre took {}'.format(animalID,tNum,self.tpTime))
 
 
-	if s==1:
-		sR=comObj.readline().strip().decode()
-		sR=sR.split(',')
-		if len(sR)==varCount and sR[0]=='vars':
-			s=int(sR[sNum])
 
-			for x in range(0,len(varStates)):
-				exec('{}=sR[{}]'.format(varStates[x],varNums[x]))
-		
-		
-
-		for x in range(0,len(varStates)):
-			a=eval('curVarState({})'.format(varStates[x]))
-			if a==0:
-				tVal=eval(varNames[x])
-				comObj.write('{}{}>'.format(varHeader[x],tVal).encode('utf-8'))
-				time.sleep(serDelay)
-			
-	print('queued_{}'.format(tNum))
-	bT=current_milli_time();
-
-	while s!=2:
-		comObj.flush()
-		comObj.write('a2>'.encode('utf-8'))
-		sR=comObj.readline().strip().decode()
-		sR=sR.split(',')
-		if len(sR)==varCount and sR[0]=='vars':
-			s=int(sR[sNum])
-			
-
-	n=1
-	while n<=tDur:
-		
-		# comObj.flush()
-		sR=comObj.readline().strip().decode()
-		sR=sR.split(',')
-		if len(sR)==dataCount and sR[0]=='data' :
-			for x in range(0,len(trialStores)):
-				exec('{}.append(sR[{}])'.format(trialStores[x],trialStoresIDs[x]))
-			n=n+1
-
-	eT=current_milli_time();
-
-	while s==2:	
-		sR=comObj.readline().strip().decode()
-		sR=sR.split(',')
-		if len(sR)==varCount and sR[0]=='vars':
-			s=int(sR[sNum])
-			comObj.write('a0>'.encode('utf-8'))
-
-	teTime=eT-bT
-	tpTime=bT-pST
-	print('eT: {}'.format(teTime))
-	print('pT: {}'.format(tpTime))
-	
-	tCo=[]
-	for x in range(0,len(trialStores)):
-		exec('tCo={}'.format(trialStores[x]))
-		if x==0:
-			rf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
-		elif x != 0:
-			tf=pd.DataFrame({'{}'.format(trialStores[x]):tCo})
-			rf=pd.concat([rf,tf],axis=1)
-
-	rf.to_csv('{}_trial_{} done; pre took {}'.format(animalID,tNum,tpTime))
-	trialTime.append(teTime)
-	preTime.append(tpTime)
-	print('{}_trial_{} done; pre took {}'.format(animalID,tNum,tpTime))
-	tNum=tNum+1
-
-# end the session
-tCo=[]
-
-for x in range(0,len(sessionStores)):
-	exec('tCo={}'.format(sessionStores[x]))
-	if x==0:
-		rf=pd.DataFrame({'{}'.format(sessionStores[x]):tCo})
-	elif x != 0:
-		tf=pd.DataFrame({'{}'.format(sessionStores[x]):tCo})
-		rf=pd.concat([rf,tf],axis=1)
-rf.to_csv('{}_session_{}.csv'.format(animalID,1))
-print(np.mean(trialTime))
-print(np.mean(preTime))
-# clean up
-comObj.close()
-print('done')
-sys.exit(0)
+root = Tk()
+app = pyStim(root)
+root.mainloop()
+exit()

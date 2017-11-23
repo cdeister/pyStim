@@ -10,7 +10,7 @@
 #include <FlexiTimer2.h>
 
 // session params
-int sampsPerSecond = 2000; // samples per second
+int sampsPerSecond = 1000; // samples per second
 float evalEverySample = 1.0; // number of times to poll the stim funtion
 int trigTime = 0.01 * sampsPerSecond;
 
@@ -20,6 +20,7 @@ float stateCounterB = 0;
 int pulseCounterA = 0;
 int pulseCounterB = 0;
 float tTime = 0;
+float initArTime;
 
 // train vals that get set in python
 int pulseTimeA = 0;
@@ -90,6 +91,7 @@ const int scopeTrigger = 6;
 
 
 void setup() {
+  
   Serial.begin(19200);
   delay(2);
   analogWriteResolution(12);
@@ -126,7 +128,8 @@ void fStim() {
     kSet = 0;
     lSet = 0;
     mSet = 0;
-
+    
+    initArTime=millis();
     sBit = 0;
     pulseTimeA = -1;
     delayTimeA = -1;
@@ -230,7 +233,6 @@ void fStim() {
       }
     }
   }
-
 
   if (pyState == 2) {
 
@@ -417,7 +419,6 @@ void spitVars() {
 }
 
 
-
 void spitData() {
   Serial.print("data");
   Serial.print(',');
@@ -431,11 +432,10 @@ void spitData() {
   Serial.print(',');
   Serial.print(readValB);
   Serial.print(',');
-  Serial.print(stimAmp_chanA);
+  Serial.print(millis()-initArTime);
   Serial.print(',');
   Serial.println(stimAmp_chanB);
 }
-
 
 int flagReceive(char startChars, char endChars, int targVar) {
   static boolean recvInProgress = false;
