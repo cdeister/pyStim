@@ -33,9 +33,9 @@ class psVariables:
 		'animalID':"an1",'uiUpdateSamps':100,'sRate':1000,\
 		'lickThresholdStrValB':550,'totalTrials':150,\
 		'sampsToPlot':1000,'comPath':"/dev/cu.usbmodem2762721",\
-		'baudRate':19200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':8,\
+		'baudRate':9600,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':8,\
 		'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':8,\
-		'serDelay':0.005,'tNum':1,'tDur':5000}
+		'serDelay':0.005,'tNum':1,'tDur':8000}
 		exec('self.{}=sesVarD'.format(idString))
 
 		psVariables.dictToPandas(self,sesVarD,idString)
@@ -65,6 +65,130 @@ class psVariables:
 			dictName[k]=a
 			varIt=varIt+1
 
+class psPlot:
+
+	def trialPlotFig(self):
+		self.trialFramePosition='+370+0' # can be specified elsewhere
+		self.updateTrialAxes=0
+		
+		self.trialFig = plt.figure(100,figsize=(4,5), dpi=100)
+		tNum=self.sesVarD['tNum']
+		self.trialFig.suptitle('trial # {} of {}'.format(tNum,10),fontsize=10)
+		self.trialFig.subplots_adjust(wspace=0.1,hspace=0.2)
+		
+		mng = plt.get_current_fig_manager()
+		eval('mng.window.wm_geometry("{}")'.format(self.trialFramePosition))
+
+		self.positionAxes=plt.subplot2grid([2,2],(0,0),colspan=2,rowspan=1)
+		self.positionAxes.set_yticks([])
+		self.positionAxes.set_xticks([])
+		self.positionAxes.set_ylim([-100,4200])
+		self.positionAxes.set_xlim([0,9000])
+		self.positionAxes.set_title('current trial',fontsize=10)
+		self.positionLine,=self.positionAxes.plot([1,1],color="olive",lw=1)
+		self.positionLine2,=self.positionAxes.plot([1,1],color="cornflowerblue",lw=1)
+		plt.show(block=False)
+
+		self.lastTrialAxes=plt.subplot2grid([2,2],(1,0),colspan=2,rowspan=1)
+		self.lastTrialAxes.set_yticks([])
+		self.lastTrialAxes.set_xticks([])
+		self.lastTrialAxes.set_ylim([-1,4096])
+		self.lastTrialAxes.set_xlim([0,5000])
+		self.lastTrialAxes.set_title('last trial',fontsize=10)
+		self.lastDataLine,=self.lastTrialAxes.plot([1,1],color="olive",lw=1)
+		self.lastDataLine2,=self.lastTrialAxes.plot([1,1],color="cornflowerblue",lw=1)
+		plt.show(block=False)
+
+	
+	def updateTrialFig(self):
+
+		splt=500
+		posPltYData=np.array(psData.v1[-int(splt):])
+		posPltYData2=np.array(psData.v2[-int(splt):])
+		x0=np.array(psData.tm[-int(splt):])    #np.arange(len(posPltYData))
+		tNum=self.sesVarD['tNum']
+		self.trialFig.suptitle('trial # {} of {}'.format(tNum,10),fontsize=10)
+		
+		if len(x0)>1:
+			self.positionLine.set_xdata(x0)
+			self.positionLine.set_ydata(posPltYData)
+			self.positionLine2.set_xdata(x0)
+			self.positionLine2.set_ydata(posPltYData2)
+			self.positionAxes.draw_artist(self.positionLine)
+			self.positionAxes.draw_artist(self.positionLine2)
+			self.positionAxes.draw_artist(self.positionAxes.patch)
+
+			self.trialFig.canvas.draw_idle()
+
+		self.trialFig.canvas.flush_events()
+
+	def updateLastTrialFig(self):
+
+		# splt=500
+		posPltYData=np.array(psData.v1)
+		posPltYData2=np.array(psData.v2)
+		x0=np.array(psData.tm)    #np.arange(len(posPltYData))
+
+		
+
+		self.lastDataLine.set_xdata(x0)
+		self.lastDataLine.set_ydata(posPltYData)
+		self.lastDataLine2.set_xdata(x0)
+		self.lastDataLine2.set_ydata(posPltYData2)
+		self.lastTrialAxes.draw_artist(self.lastDataLine)
+		self.lastTrialAxes.draw_artist(self.lastDataLine2)
+		self.lastTrialAxes.draw_artist(self.lastTrialAxes.patch)
+
+		self.trialFig.canvas.draw_idle()
+
+		self.trialFig.canvas.flush_events()
+
+class psUtil:
+
+	def getPath(self):
+
+		self.selectPath = fd.askdirectory(title ="what what?")
+
+	def getFilePath(self):
+
+		self.selectPath = fd.askopenfilename(title ="what what?",defaultextension='.csv')
+
+	def setSessionPath(self):
+		dirPathFlg=os.path.isdir(self.dirPath_tv.get())
+		if dirPathFlg==False:
+			os.mkdir(self.dirPath_tv)
+		self.dirPath.set(self.dirPath_tv)
+		self.setSesPath=1
+
+	def mapAssign(self,l1,l2):
+		for x in range(0,len(l1)):
+			if type(l2[x])==int:
+				exec('self.{}=int({})'.format(l1[x],l2[x])) 
+			elif type(l2[x])==float:
+				exec('self.{}=float({})'.format(l1[x],l2[x])) 
+
+	def mapAssignStringEntries(self,l1,l2):
+		for x in range(0,len(l1)):
+			a=[l2[x]]
+			exec('self.{}.set(a[0])'.format(l1[x]))
+
+	def refreshDictFromGui(self,dictName):
+		for key in list(dictName.keys()):
+			a=eval('self.{}_tv.get()'.format(key))
+			try:
+				a=float(a)
+				if a.is_integer():
+					a=int(a)
+				exec('dictName["{}"]={}'.format(key,a))
+			except:
+				exec('dictName["{}"]="{}"'.format(key,a))
+
+
+	def refreshGuiFromDict(self,dictName):
+
+		for key in list(dictName.keys()):
+			eval('self.{}_tv.set(dictName["{}"])'.format(key,key))
+
 class psData:
 
 	def initSessionData(self):
@@ -77,6 +201,7 @@ class psData:
 		psData.trialStoresIDs=[1,2,3,4,5,6]
 		for x in range(0,len(psData.trialStores)): 
 			exec('psData.{}=[]'.format(psData.trialStores[x]))
+
 
 	def initTeensyStateData(self): # hacky
 
@@ -104,27 +229,171 @@ class psData:
 		self.preTime.append(self.tpTime)
 		print('{}_trial_{} done; pre took {}'.format(animalID,tNum,tpTime))
 
+class psWindow:
+
+	def blankLine(self,targ,startRow):
+		self.guiBuf=Label(targ, text="")
+		self.guiBuf.grid(row=startRow,column=0,sticky=W)
+
+	def mwQuitBtn(self):
+
+		print('!!!! going down')
+		print('... closed the com obj')
+		exit()
+
+	def psWindowPopulate(self):
+
+		self.master.title("pyStim")
+		self.col2BW=10
+		pStart=0
+		sesStart=pStart+8
+		mainStart=sesStart+7
+		psWindow.addSessionBlock(self,sesStart)
+		psWindow.addMainBlock(self,mainStart)
+
+	def addMainBlock(self,startRow):
+		self.startRow = startRow
+		# psWindow.blankLine(self.master,startRow)
+
+		self.mainCntrlLabel = Label(self.master, text="Main Controls:")\
+		.grid(row=startRow,column=0,sticky=W)
+
+		self.quitBtn = Button(self.master,text="Exit Program",command = \
+			lambda: psWindow.mwQuitBtn(self), width=self.col2BW)
+		self.quitBtn.grid(row=startRow+1, column=2)
+
+		self.startBtn = Button(self.master, text="Start Task",width=10,command=\
+			lambda: pyStim.runStimSession(self) ,state=NORMAL)
+		self.startBtn.grid(row=startRow+1, column=0,sticky=W,padx=10)
+
+		self.endBtn = Button(self.master, text="End Task",width=self.col2BW, \
+			command=lambda:pdState.switchState(self,self.stMapD['endState']),state=NORMAL)
+		self.endBtn.grid(row=startRow+2, column=0,sticky=W,padx=10)
+
+
+	def addSessionBlock(self,startRow):
+		# @@@@@ --> Session Block
+		self.sesPathFuzzy=1 # This variable is set when we guess the path.
+
+		self.animalID='yourID'
+		self.dateStr = datetime.datetime.fromtimestamp(time.time()).\
+		strftime('%H:%M (%m/%d/%Y)')
+
+		# psWindow.blankLine(self.master,startRow)
+		self.sessionStuffLabel = Label(self.master,text="Session Stuff: ",justify=LEFT).\
+		grid(row=startRow+1, column=0,sticky=W)
+
+		self.timeDisp = Label(self.master, text=' #{} started: '\
+			.format(self.sesVarD['currentSession']) + self.dateStr,justify=LEFT)
+		self.timeDisp.grid(row=startRow+2,column=0,sticky=W)
+
+		self.dirPath_tv=StringVar(self.master)
+		self.pathEntry=Entry(self.master,textvariable=self.dirPath_tv,width=24,bg='grey')
+		self.pathEntry.grid(row=startRow+3,column=0,sticky=W)
+		self.dirPath_tv.set(os.path.join(os.getcwd(),self.animalID))
+
+		self.setPath_button = Button(self.master,text="<- Set Path",\
+			command=lambda:psWindow.mwPathBtn(self),width=self.col2BW)
+		self.setPath_button.grid(row=startRow+3,column=2)
+
+		self.aIDLabel=Label(self.master, text="animal id:")\
+		.grid(row=startRow+4,column=0,sticky=W)
+		self.animalIDStr_tv=StringVar(self.master)
+		self.animalIDEntry=Entry(self.master,textvariable=\
+			self.animalIDStr_tv,width=14,bg='grey')
+		self.animalIDEntry.grid(row=startRow+4,column=0,sticky=E)
+		self.animalIDStr_tv.set(self.animalID)
+
+		self.totalTrials_label = Label(self.master,text="total trials:")\
+		.grid(row=startRow+5,column=0,sticky=W)
+		self.totalTrials_tv=StringVar(self.master)
+		self.totalTrials_tv.set('100')
+		self.totalTrials_entry=Entry(self.master,textvariable=\
+			self.totalTrials_tv,width=10).\
+		grid(row=startRow+5,column=0,sticky=E)
+
+		self.curSession_label = Label(self.master,text="current session:").\
+		grid(row=startRow+6,column=0,sticky=W)
+		self.currentSession_tv=StringVar(self.master)
+		self.currentSession_tv.set(self.sesVarD['currentSession'])
+		self.curSession_entry=Entry(self.master,textvariable=\
+			self.currentSession_tv,width=10)
+		self.curSession_entry.grid(row=startRow+6,column=0,sticky=E)
+
+
+
+		self.loadAnimalMetaBtn = Button(self.master,text = 'Load Metadata',\
+			width = self.col2BW,command = lambda: psWindow.mwLoadMetaBtn(self))
+		self.loadAnimalMetaBtn.grid(row=startRow+1, column=2)
+		self.loadAnimalMetaBtn.config(state=NORMAL)
+
+		self.saveCurrentMetaBtn=Button(self.master,text="Save Cur. Meta",\
+			command=lambda:pdUtil.exportAnimalMeta(self), width=self.col2BW)
+		self.saveCurrentMetaBtn.grid(row=startRow+2,column=2)
+
+class psTypes:
+
+	def yup(self):
+		print('who')
+
 class pyStim:
 
 	def __init__(self,master):
-		baudRate=19200
-		boardNum=2540591
 
-		self.teensy = serial.Serial('/dev/cu.usbmodem{}'.format(boardNum),baudRate)
+		psData.initSessionData(self)
+		psVariables.setSessionVars(self,'sesVarD')
+
+		
 		self.master = master
 		self.frame = Frame(self.master)
 		root.wm_geometry("+0+0")
-		psData.initSessionData(self)
-		psVariables.setSessionVars(self,'sesVarD')
+		psWindow.psWindowPopulate(self)
+		psPlot.trialPlotFig(self)
+
+	def connectTeensy(self):
+		baudRate=19200
+		boardNum=2540591
+		self.teensy = serial.Serial('/dev/cu.usbmodem{}'.format(boardNum),baudRate)
 		
+	def runStimSession(self):
+		# self.uiUpdateDelta=int(self.uiUpdateSamps_tv.get())
+		
+		psData.initSessionData(self)
+		psData.initTrialData(self)
+		psVariables.setSessionVars(self,'sesVarD')
+		psVariables.setPulseTrainVars(self,'ptVarD_chan0')
+		psVariables.setPulseTrainVars(self,'ptVarD_chan1')
+
+		pyStim.connectTeensy(self)
+		sA=[1,1.2,0.8,3.2,2.6,0,0.2,0.1,0.5,1,1,2]
+		self.ptVarD_chan1['pulseAmpV']
 		while self.sesVarD['tNum']<=10:
+			self.ptVarD_chan1['pulseAmpV']=sA[self.sesVarD['tNum']-1]
+			# pyStim.connectTeensy(self)
+			print('lA')
+			self.initPulseTrain()
+			print('lB')
 			self.pulseTrainTrial()
-			# psData.saveTrialData(self)
+			print('lC={}'.format(self.sesVarD['tNum']))
 			self.sesVarD['tNum']=self.sesVarD['tNum']+1
+			# pyStim.cleanup(self)
+			# psData.saveTrialData(self)
+		pyStim.cleanup(self)	
 		pyStim.exportAnimalMeta(self)
+		return()
+		
+		
+	def cleanup(self):
+		while self.s != 0:
+			self.tR,self.tU=self.readSerialData(self.comObj,'vars',self.varCount)
+			if self.tU:
+				self.s=int(self.tR[self.sNum])
+			self.teensy.write('a0>'.encode('utf-8'))
+
 		self.teensy.close()
 
 	def readSerialData(self,comObj,headerString,headerCount):
+
 		sR=comObj.readline().strip().decode()
 		sR=sR.split(',')
 		if len(sR)==headerCount and sR[0]==headerString:
@@ -133,119 +402,131 @@ class pyStim:
 			newData=0
 		return sR,newData
 
-
 	def exportAnimalMeta(self):
+
 		self.sesVarD_Bindings.to_csv('sesVars.csv')
 		self.ptVarD_chan0_Bindings.to_csv('ptAVar.csv')
 		self.ptVarD_chan1_Bindings.to_csv('ptBVar.csv')
 
-	def pulseTrainTrial(self):
-		psVariables.setPulseTrainVars(self,'ptVarD_chan0')
-		psVariables.setPulseTrainVars(self,'ptVarD_chan1')
+	def updatePlotCheck(self):
+
+		if plt.fignum_exists(100):
+			psPlot.updateTrialFig(self)
+		self.cycleCount=0
+
+	def initPulseTrain(self):
+		self.inTrial=1
+		self.s=-1
+			
+		
 		psData.initTeensyStateData(self)
 		psData.initTrialData(self)
+		self.sNum=self.sesVarD['sNum']
+		self.varStates=psData.varStates
+		self.varNums=psData.varNums
+		self.varNames=psData.varNames
+		self.varHeader=psData.varHeader
+		self.varCount=self.sesVarD['varCount']
+		self.dataCount=self.sesVarD['dataCount']
+		self.serDelay=self.sesVarD['serDelay']
+		self.tDur=self.sesVarD['tDur']
+		self.tNum=self.sesVarD['tNum']
+		self.comObj=self.teensy
+		self.animalID=self.sesVarD['animalID']
 
-		# ugly hack
-		pAmpA=self.ptVarD_chan0['pulseAmpV']
-		pDurA=self.ptVarD_chan0['pulseTime']
-		iPIntA=self.ptVarD_chan0['dwellTime']
-		nPulsesA=self.ptVarD_chan0['nPulses']
-		bDurA=self.ptVarD_chan0['baselineTime']
-		pAmpB=self.ptVarD_chan1['pulseAmpV']
-		pDurB=self.ptVarD_chan1['pulseTime']
-		iPIntB=self.ptVarD_chan1['dwellTime']
-		nPulsesB=self.ptVarD_chan1['nPulses']
-		bDurB=self.ptVarD_chan1['baselineTime']
-		tDur=self.sesVarD['tDur']
-
-		# local vars
-		sNum=self.sesVarD['sNum']
-		varStates=psData.varStates
-		varNums=psData.varNums
-		varNames=psData.varNames
-		varHeader=psData.varHeader
-		varCount=self.sesVarD['varCount']
-		dataCount=self.sesVarD['dataCount']
-		serDelay=self.sesVarD['serDelay']
-		tDur=self.sesVarD['tDur']
-		tNum=self.sesVarD['tNum']
-		resetVars=0
-		comObj=self.teensy
-		animalID=self.sesVarD['animalID']
-
-
-		current_milli_time = lambda: int(round(time.time() * 1000))
-		curVarState = lambda x: x==0 
-
-		pST=current_milli_time()
-		# send to state 0 to reset variables
-		while resetVars==0:
-			tR,tU=self.readSerialData(comObj,'vars',varCount)
-			if tU:
-				s=int(tR[sNum])
-				if (s != 0):
-					self.teensy.write('a0>'.encode('utf-8'))
-					time.sleep(0.005)
-				elif s == 0:
-					resetVars=1
-
-		# send to state 1
-		while s != 1:
-			comObj.write('a1>'.encode('utf-8'))
-			time.sleep(0.025)
-			tR,tU=self.readSerialData(comObj,'vars',varCount)
-			if tU:
-				s=int(tR[sNum])
-				for x in range(0,len(varStates)):
-					exec('{}=tR[{}]'.format(varStates[x],varNums[x]))
-
-		if s==1:
-			tR,tU=self.readSerialData(comObj,'vars',varCount)
-			if tU:
-				s=int(tR[sNum])
-				for x in range(0,len(varStates)):
-					exec('{}=tR[{}]'.format(varStates[x],varNums[x]))
-		
-			for x in range(0,len(varStates)):
-				a=eval('curVarState({})'.format(varStates[x]))
-				if a==0:
-					tVal=eval(varNames[x])
-					comObj.write('{}{}>'.format(varHeader[x],tVal).encode('utf-8'))
-					time.sleep(serDelay)
-		
-		print('go')
-		bT=current_milli_time();
-		while s!=2:
 			
-			comObj.flush()
-			comObj.write('a2>'.encode('utf-8'))
-			tR,tU=self.readSerialData(comObj,'vars',varCount)
-			if tU:
-				s=int(tR[sNum])
+		self.current_milli_time = lambda: int(round(time.time() * 1000))
+		self.curVarState = lambda x: x==0 
 
-		n=1
-		while n<=tDur:
-			tR,tU=self.readSerialData(comObj,'data',dataCount)
-			if tU:
-				for x in range(0,len(psData.trialStores)):
-					exec('psData.{}.append(tR[{}])'.format(psData.trialStores[x],psData.trialStoresIDs[x]))
-				n=n+1
+			
+		while self.s != 0:
+			self.tR,self.tU=self.readSerialData(self.comObj,'vars',self.varCount)
+			if self.tU:
+				self.s=int(self.tR[self.sNum])
+			self.teensy.write('a0>'.encode('utf-8'))
+			time.sleep(0.001)
+			# self.teensy.flush()
 
-		eT=current_milli_time();
+		print('syncd')
+		self.resetVariables=0
 
-		while s!=2:
-			comObj.flush()
-			comObj.write('a2>'.encode('utf-8'))
-			tR,tU=self.readSerialData(comObj,'vars',varCount)
-			if tU:
-				s=int(tR[sNum])
-				comObj.write('a0>'.encode('utf-8'))
+	def pulseTrainTrial(self):
+		while self.inTrial ==1:
+			if self.s==0:				
+				if self.resetVariables==0:
+					self.tR,self.tU=self.readSerialData(self.comObj,'vars',self.varCount)
+					if self.tU:
+						self.s=int(self.tR[self.sNum])
+					n=1
+					pAmpA=(self.ptVarD_chan0['pulseAmpV']/3.3)*4095
+					pDurA=self.ptVarD_chan0['pulseTime']
+					iPIntA=self.ptVarD_chan0['dwellTime']
+					nPulsesA=self.ptVarD_chan0['nPulses']
+					bDurA=self.ptVarD_chan0['baselineTime']
 
-		self.teTime=eT-bT
-		self.tpTime=bT-pST
-		print('{}_trial_{} done; pre took {}'.format(animalID,tNum,self.tpTime))
+					pAmpB=(self.ptVarD_chan1['pulseAmpV']/3.3)*4095
+					pDurB=self.ptVarD_chan1['pulseTime']
+					iPIntB=self.ptVarD_chan1['dwellTime']
+					nPulsesB=self.ptVarD_chan1['nPulses']
+					bDurB=self.ptVarD_chan1['baselineTime']
+					tDur=self.sesVarD['tDur']
+					pST=self.current_milli_time()
+					self.varsSent=0
+					self.resetVariables=1
+					varCheck=np.zeros(len(self.varStates))
 
+				elif self.resetVariables==1:
+					self.tR,self.tU=self.readSerialData(self.comObj,'vars',self.varCount)
+					if self.tU:
+						self.s=int(self.tR[self.sNum])
+						print('in s0')
+						print('reset={}_s{}'.format(self.resetVariables,self.s))
+						self.teensy.write('a1>'.encode('utf-8'))
+						time.sleep(0.005)
 
+			
+			elif self.s == 1:
+				self.tR,self.tU=self.readSerialData(self.comObj,'vars',self.varCount)
+				if self.tU:
+					self.s=int(self.tR[self.sNum])
+
+					for x in range(0,len(self.varStates)):
+						exec('{}=self.tR[{}]'.format(self.varStates[x],self.varNums[x]))
+						a=int(self.tR[self.varNums[x]])
+						varCheck[x-1]=(int(a))
+						if np.sum(varCheck)==len(self.varStates):
+							self.varsSent=1
+							print('done')
+							print(self.tR)
+							print(sum(varCheck))
+						if a==0:
+							tVal=str(int(eval('{}'.format(psData.varNames[x]))))
+							self.comObj.write('{}{}>'.format(self.varHeader[x],tVal).\
+								encode('utf-8'))
+				if self.varsSent==1:
+					n=1
+					print('s1:c3_{}'.format(self.s))
+					bT=self.current_milli_time();
+					self.comObj.write('a2>'.encode('utf-8'))
+							
+		
+		
+			elif self.s==2:
+				while n<=self.tDur:
+					dR,dU=self.readSerialData(self.teensy,'data',self.dataCount)
+					if n % 100 == 0:
+						pyStim.updatePlotCheck(self)
+					if dU:
+						if n % 100 == 0:
+							pyStim.updatePlotCheck(self)
+						for x in range(0,len(psData.trialStores)):
+							a=dR[psData.trialStoresIDs[x]]
+							exec('psData.{}.append({})'.format(psData.trialStores[x],a))
+						n=n+1
+					if n==self.tDur:
+						self.inTrial==0
+						return()
+				
 
 root = Tk()
 app = pyStim(root)

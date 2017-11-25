@@ -105,9 +105,10 @@ void setup() {
 void fStim() {
 
   pyState = flagReceive('a', '>', pyState);
-  spitVars();
+  
 
   if (pyState == 0) {
+    spitVars();
     tTime = 0;
     
     stateCounterA = 0;
@@ -162,6 +163,7 @@ void fStim() {
 
   // state 0 is the reset state
   if (pyState == 1) {
+    spitVars();
     delay(5);
     if (bSet == 0) {
       stimAmp_chanA = flagReceive('b', '>', stimAmp_chanA);
@@ -235,7 +237,8 @@ void fStim() {
   }
 
   if (pyState == 2) {
-
+    spitVars();
+   
     // always increment time and see if we are out of it
     tTime = tTime + 1;
     if (tTime <= trainDur) {
@@ -416,6 +419,7 @@ void spitVars() {
   Serial.println(lSet);
 
 
+
 }
 
 
@@ -434,7 +438,7 @@ void spitData() {
   Serial.print(',');
   Serial.print(millis()-initArTime);
   Serial.print(',');
-  Serial.println(stimAmp_chanB);
+  Serial.println(baselineA);
 }
 
 int flagReceive(char startChars, char endChars, int targVar) {
