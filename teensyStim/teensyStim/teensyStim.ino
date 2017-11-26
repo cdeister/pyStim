@@ -29,8 +29,6 @@ int stimAmp_chanA = 0;
 int nPulseA = 0;
 int baselineA = 0;
 
-
-
 int pulseTimeB = 0;
 int delayTimeB = 0;
 int stimAmp_chanB = 0;
@@ -54,6 +52,8 @@ bool lSet = 0;
 bool mSet = 0;
 
 bool sBit = 0;
+int serialDelay=0.1*sampsPerSecond;
+int serDelayCounter=0;
 
 
 // general variable
@@ -73,6 +73,7 @@ bool inPulseB = 0;
 bool baselineAComp = 0;
 bool baselineBComp = 0;
 bool scopeTriggered = 0;
+bool flushState=0;
 
 // analog outputs
 const int dacPinA = A21;
@@ -93,7 +94,7 @@ const int scopeTrigger = 6;
 void setup() {
   
   Serial.begin(19200);
-  delay(2);
+  delay(1);
   analogWriteResolution(12);
   pinMode(pulseA_LED, OUTPUT);
   pinMode(pulseB_LED, OUTPUT);
@@ -108,7 +109,11 @@ void fStim() {
   
 
   if (pyState == 0) {
-    spitVars();
+    if (serDelayCounter>=serialDelay){
+      spitVars();
+      serDelayCounter=0;
+    }
+    
     tTime = 0;
     
     stateCounterA = 0;
@@ -116,6 +121,8 @@ void fStim() {
     
     pulseCounterA = 0;
     pulseCounterB = 0;
+
+    
 
     bSet = 0;
     cSet = 0;
@@ -129,6 +136,8 @@ void fStim() {
     kSet = 0;
     lSet = 0;
     mSet = 0;
+
+    flushState=0;
     
     initArTime=millis();
     sBit = 0;
@@ -155,16 +164,31 @@ void fStim() {
     scopeTriggered = 0;
     writeValA = 0;
     writeValB = 0;
-
-    delay(5);
+    serDelayCounter=serDelayCounter+1;
+    if (flushState==0){
+      clearBuffer();
+      flushState=1;
+    }
+    
   }
 
 
 
   // state 0 is the reset state
   if (pyState == 1) {
-    spitVars();
-    delay(5);
+      if (flushState==0){
+        clearBuffer();
+        flushState=0;
+      }
+      
+      if (serDelayCounter>=serialDelay){
+        spitVars();
+        serDelayCounter=0;
+      }
+      
+      serDelayCounter=serDelayCounter+1;
+
+    
     if (bSet == 0) {
       stimAmp_chanA = flagReceive('b', '>', stimAmp_chanA);
       if (stimAmp_chanA != -1) {
@@ -234,11 +258,12 @@ void fStim() {
         lSet = 1;
       }
     }
+//    serDelayCounter=serDelayCounter+1;
   }
 
   if (pyState == 2) {
+
     spitVars();
-   
     // always increment time and see if we are out of it
     tTime = tTime + 1;
     if (tTime <= trainDur) {
@@ -395,7 +420,6 @@ void spitVars() {
   Serial.print(',');
   Serial.print(pyState);
   Serial.print(',');
-
   Serial.print(bSet);
   Serial.print(',');
   Serial.print(cSet);
@@ -417,9 +441,6 @@ void spitVars() {
   Serial.print(kSet);
   Serial.print(',');
   Serial.println(lSet);
-
-
-
 }
 
 
@@ -439,6 +460,12 @@ void spitData() {
   Serial.print(millis()-initArTime);
   Serial.print(',');
   Serial.println(baselineA);
+}
+
+void clearBuffer(){
+  while (Serial.available()){
+      Serial.read();
+    }
 }
 
 int flagReceive(char startChars, char endChars, int targVar) {
