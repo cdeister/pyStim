@@ -3,7 +3,7 @@
    I assume you have a 3.5 or 3.6 and have 2 outs. But you can easily go to 1.
    I use the builtin FlexiTimer2 to handle the interupts for timing.
 
-   v1.0
+   v0.96
    11/27/2017
    cdeister@brown.edu
 */
@@ -11,7 +11,7 @@
 #include <FlexiTimer2.h>
 
 // session params
-int sampsPerSecond = 1000; // samples per second
+int sampsPerSecond = 5000; // samples per second (works well up to 5K, 10-20K with effort)
 float evalEverySample = 1.0; // number of times to poll the stim funtion
 int trigTime = 0.01 * sampsPerSecond;
 
@@ -120,12 +120,10 @@ void fStim() {
   // always look for new info from python.
   bool p = flagReceive();
   if (p == 1) {
-    c3 = 9;
+
     assignVars();
     spitVars();
-    Serial.print("yo");
-    Serial.print(',');
-    Serial.println(c3);
+
   }
 
 
@@ -137,14 +135,9 @@ void fStim() {
   // **********************************
 
   if (pyState == 0) {
-
-    if (serDelayCounter >= serialDelay) {
-      spitVars();
-      serDelayCounter = 0;
+    while (Serial.available()){
+      Serial.read();
     }
-
-
-
     tTime = 0;
 
     stateCounterA = 0;
