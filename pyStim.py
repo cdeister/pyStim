@@ -31,10 +31,10 @@ class psVariables:
 		
 		sesVarD = {'currentSession':1,'dirPath':"/",\
 		'animalID':"an1",'uiUpdateSamps':100,'sRate':1000,\
-		'totalTrials':50,'sampsToPlot':500,'comBoard':2540591,\
-		'baudRate':19200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':8,\
-		'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':8,\
-		'serDelay':0.000001,'tNum':1,'tDur':3}
+		'totalTrials':50,'sampsToPlot':1000,'comBoard':2762721,\
+		'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':8,\
+		'dacBitDepth':12,'varCount':14,'sNum':1,'dataCount':8,\
+		'serDelay':0.000001,'tNum':1,'tDur':10}
 		exec('self.{}=sesVarD'.format(idString))
 		# self.sesVarD['totalTrials']
 		psVariables.dictToPandas(self,sesVarD,idString)
@@ -102,6 +102,7 @@ class psPlot:
 	
 	def updateTrialFig(self):
 		dT=np.divide(1,self.sesVarD['sRate'])
+		print(dT)
 		splt=self.sesVarD['sampsToPlot']
 		posPltYData=np.array(psData.v1[-int(splt):])
 		posPltYData2=np.array(psData.v2[-int(splt):])
@@ -212,7 +213,7 @@ class psData:
 		'jSt','kSt','lSt'
 		psData.varNames='pAmpA','pDurA','iPIntA','nPulsesA','bDurA','tDur',\
 		'pAmpB','pDurB','iPIntB','nPulsesB','bDurB'
-		psData.varNums=[2,3,4,5,6,7,8,9,10,11,12]
+		psData.varNums=[1,2,3,4,5,6,7,8,9,10,11]
 
 	def saveTrialData(self):
 		animalID=self.sesVarD['animalID']
@@ -371,24 +372,25 @@ class pyStim:
 		
 		print(max(sA))
 		self.preTimes=[]
+		pyStim.connectTeensy(self)
 		while self.sesVarD['tNum']<=self.sesVarD['totalTrials']:
-			
 			c1=np.random.random_integers(len(sA))
 			c2=np.random.random_integers(len(sB))
 			print(c1)
 
 			self.ptVarD_chan0['pulseAmpV']=sA[c2-1]
 			self.ptVarD_chan1['pulseAmpV']=sA[c1-1]
-			pyStim.connectTeensy(self) 
+			 
 			
 			print('trial={}'.format(self.sesVarD['tNum']))
 			self.initPulseTrain()			
 			self.pulseTrainTrial()
 			psPlot.updateLastTrialFig(self)
 			self.sesVarD['tNum']=self.sesVarD['tNum']+1
-			self.teensy.close()
 		pyStim.exportAnimalMeta(self)
+		self.teensy.close()
 		print(self.preTimes)
+		self.initPulseTrain()
 		print('done')
 		return()
 		
@@ -402,7 +404,6 @@ class pyStim:
 			self.teensy.flush()
 
 		self.teensy.close()
-		#self.teensy.delete()
 
 	def readSerialData(self,comObj,headerString,headerCount):
 
@@ -486,8 +487,8 @@ class pyStim:
 					pST=self.current_milli_time()
 					self.varsSent=0
 					self.resetVariables=1
-					varCheck=np.zeros(len(self.varStates))
-					s1Counter=0
+					# vars for 1
+					varCheck=np.zeros(len(self.varNums))
 
 				elif self.resetVariables==1:
 					self.tR,self.tU=self.readSerialData(self.comObj,'vars',self.varCount)
@@ -495,40 +496,36 @@ class pyStim:
 						self.s=int(self.tR[self.sNum])						
 						self.teensy.write('a1>'.encode('utf-8'))
 						self.teensy.flush()
-						
 
-			
 			elif self.s == 1:
 				self.tR,self.tU=self.readSerialData(self.comObj,'vars',self.varCount)
+				self.uR,self.uU=self.readSerialData(self.comObj,'update',5)
 				if self.tU:
-					
-					s1Counter=s1Counter+1
 					self.s=int(self.tR[self.sNum])
-					
-					if self.varsSent==0:
-						varsNotSet=np.hstack(np.argwhere(varCheck==0))
-					for x in range(0,len(varsNotSet)):
-						lX=varsNotSet[x]
-						exec('{}=self.tR[{}]'.format(self.varStates[lX],self.varNums[lX]))
-						a=int(self.tR[self.varNums[lX]])
-						varCheck[lX]=int(a)
-						
-						if np.sum(varCheck)==len(self.varStates):
-							self.varsSent=1							
+				if self.uU:
+					lUpVar=int(self.uR[3])
+					varCheck[lUpVar-1]=1
 
-						if a==0:
-							tVal=str(int(eval('{}'.format(psData.varNames[lX]))))
-							self.comObj.write('{}{}>'.format(self.varHeader[lX],tVal).encode('utf-8'))
-							if s1Counter>self.sesVarD['uiUpdateSamps']:
-								pyStim.updatePlotCheck(self)
-								s1Counter=0
-							self.teensy.flush()
+				# varsNotSet=[]
+				if self.varsSent==0:
+					tUS=np.argwhere(varCheck==0)
+					if len(tUS)>0:
+						varsNotSet=np.hstack(tUS)
+						upVar=varsNotSet[0]
+						tHead=self.varHeader[upVar]
+						tVal=str(int(eval('{}'.format(psData.varNames[upVar]))))
+						self.comObj.write('{}{}>'.format(tHead,tVal).encode('utf-8'))
 
-				if self.varsSent==1:
-					bT=self.current_milli_time();
-					self.comObj.write('a2>'.encode('utf-8'))
-							
+					if len(tUS)==0:
+						bT=self.current_milli_time();
+						self.varsSent==1
+						n=1
+						self.teensy.write('a2>'.encode('utf-8'))
+						self.teensy.flush()
+
+
 			elif self.s==2:
+				print(self.tDur)
 				while n<=self.tDur:
 					dR,dU=self.readSerialData(self.teensy,'data',self.dataCount)
 					if dU:
@@ -537,11 +534,14 @@ class pyStim:
 						for x in range(0,len(psData.trialStores)):
 							a=dR[psData.trialStoresIDs[x]]
 							exec('psData.{}.append({})'.format(psData.trialStores[x],a))
-						n=n+1
 						if n % self.sesVarD['uiUpdateSamps'] == 0:
 							pyStim.updatePlotCheck(self)
+					n=n+1
 
-					if n==self.tDur:						
+					if n==self.tDur:
+						self.teensy.write('a0>'.encode('utf-8'))
+						self.teensy.flush()
+						print(self.tDur)
 						print('fts={}'.format(psData.tC[-1]-psData.tC[0]))
 						print(bT-self.initT)
 						self.preTimes.append(bT-self.initT)
@@ -549,6 +549,7 @@ class pyStim:
 						print('fts={}'.format(psData.tm[-1]))
 						self.inTrial==0
 						return()
+
 				
 
 root = Tk()
