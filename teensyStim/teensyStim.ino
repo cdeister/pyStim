@@ -1,9 +1,10 @@
-/* ~~~~ Simple Teensy Analog Out Stim ~~~~
+/* ~~~~ Simple Real Time Teensy Analog Out Stim ~~~~
    Notes: Teensey 3.5/3.6 has two built in 12 bit dacs.
    I assume you have a 3.5 or 3.6 and have 2 outs. But you can easily go to 1.
    I use the builtin FlexiTimer2 to handle the interupts for timing.
 
    v1.0
+   11/27/2017
    cdeister@brown.edu
 */
 
@@ -22,36 +23,42 @@ int pulseCounterB = 0;
 float tTime = 0;
 float initArTime;
 
+int pulsing=0;
+
 // train vals that get set in python
-int pulseTimeA = 0;
-int delayTimeA = 0;
-int stimAmp_chanA = 0;
-int nPulseA = 0;
-int baselineA = 0;
+int c1 = 0;
+int c2 = 0;
+int c3 = 0;
 
-int pulseTimeB = 0;
-int delayTimeB = 0;
-int stimAmp_chanB = 0;
-int nPulseB = 0;
-int baselineB = 0;
+char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'};
+int knownReset[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+int knownValues[] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+int varRec = 0;
 
-int trainDur = 0;
+// init vars
+int pyState = knownValues[0];
 
-// train python states
-bool bSet = 0;
-bool cSet = 0;
-bool dSet = 0;
-bool eSet = 0;
-bool fSet = 0;
-bool gSet = 0;
-bool hSet = 0;
-bool iSet = 0;
-bool jSet = 0;
-bool kSet = 0;
-bool lSet = 0;
-bool mSet = 0;
+int  pulseTimeA = knownValues[1];
+int  delayTimeA = knownValues[2];
+int  stimAmp_chanA = knownValues[3];
+int  nPulseA = knownValues[4];
+int baselineA = knownValues[5];
+
+int  pulseTimeB = knownValues[6];
+int  delayTimeB = knownValues[7];
+int stimAmp_chanB = knownValues[8];
+int  nPulseB = knownValues[9];
+int baselineB = knownValues[10];
+
+int trainDur = knownValues[11];
+
+
+
+
 
 bool sBit = 0;
+
+// if you want to add delays it has to be counterbased
 int serialDelay = 0.1 * sampsPerSecond;
 int serDelayCounter = 0;
 
@@ -59,10 +66,13 @@ int serDelayCounter = 0;
 // general variable
 int readValA;
 int readValB;
+
 int trigAVal = 0;
+
 int writeValA = 0;
 int writeValB = 0;
-int pyState = 0;
+
+
 
 
 // boolean toggles
@@ -93,7 +103,7 @@ const int scopeTrigger = 6;
 
 void setup() {
 
-  Serial.begin(19200);
+  Serial.begin(115200);
   delay(2);
   analogWriteResolution(12);
   pinMode(pulseA_LED, OUTPUT);
@@ -103,16 +113,37 @@ void setup() {
   FlexiTimer2::start();
 }
 
+
+
 void fStim() {
 
-  pyState = flagReceive('a', '>', pyState);
+  // always look for new info from python.
+  bool p = flagReceive();
+  if (p == 1) {
+    c3 = 9;
+    assignVars();
+    spitVars();
+    Serial.print("yo");
+    Serial.print(',');
+    Serial.println(c3);
+  }
 
+
+
+
+
+  // **********************************
+  // STATE #O is the reset/rest state.
+  // **********************************
 
   if (pyState == 0) {
+
     if (serDelayCounter >= serialDelay) {
       spitVars();
       serDelayCounter = 0;
     }
+
+
 
     tTime = 0;
 
@@ -123,38 +154,11 @@ void fStim() {
     pulseCounterB = 0;
 
 
-
-    bSet = 0;
-    cSet = 0;
-    dSet = 0;
-    eSet = 0;
-    fSet = 0;
-    gSet = 0;
-    hSet = 0;
-    iSet = 0;
-    jSet = 0;
-    kSet = 0;
-    lSet = 0;
-    mSet = 0;
-
     flushState = 0;
 
     initArTime = millis();
     sBit = 0;
-    pulseTimeA = -1;
-    delayTimeA = -1;
-    stimAmp_chanA = -1;
-    nPulseA = -1;
-    baselineA = -1;
-
-    pulseTimeB = -1;
-    delayTimeB = -1;
-    stimAmp_chanB = -1;
-    nPulseB = -1;
-    baselineB = -1;
-
-    trainDur = -1;
-
+    assignVars();
     feedbackVal = 0;
     feedbackValB = 1;
     inPulseA = 0;
@@ -164,112 +168,25 @@ void fStim() {
     scopeTriggered = 0;
     writeValA = 0;
     writeValB = 0;
-    serDelayCounter = serDelayCounter + 1;
-    if (flushState == 0) {
-      clearBuffer();
-      flushState = 1;
-    }
 
   }
 
 
 
-  
-  if (pyState == 1) {
-    spitVars();
-    stimAmp_chanA = flagReceive('b', '>', stimAmp_chanA);
-    pulseTimeA = flagReceive('c', '>', pulseTimeA);
-    delayTimeA = flagReceive('d', '>', delayTimeA);
-    nPulseA = flagReceive('e', '>', nPulseA);
-    baselineA = flagReceive('f', '>', baselineA);
-    trainDur = flagReceive('g', '>', trainDur);
-    stimAmp_chanB = flagReceive('h', '>', stimAmp_chanB);
-    pulseTimeB = flagReceive('i', '>', pulseTimeB);
-    delayTimeB = flagReceive('j', '>', delayTimeB);
-    nPulseB = flagReceive('k', '>', nPulseB);
-    baselineB = flagReceive('l', '>', baselineB);
+  // **********************************
+  // STATE #1 is the init state.
+  // **********************************
+  else if (pyState == 1) {
 
 
-
-
-    if (bSet == 0) {
-//      stimAmp_chanA = flagReceive('b', '>', stimAmp_chanA);
-      if (stimAmp_chanA != -1) {
-        bSet = 1;
-      }
-    }
-
-    if (cSet == 0) {
-//      pulseTimeA = flagReceive('c', '>', pulseTimeA);
-      if (pulseTimeA != -1) {
-        cSet = 1;
-      }
-    }
-
-    if (dSet == 0) {
-//      delayTimeA = flagReceive('d', '>', delayTimeA);
-      if (delayTimeA != -1) {
-        dSet = 1;
-      }
-    }
-    if (eSet == 0) {
-//      nPulseA = flagReceive('e', '>', nPulseA);
-      if (nPulseA != -1) {
-        eSet = 1;
-      }
-    }
-
-    if (fSet == 0) {
-//      baselineA = flagReceive('f', '>', baselineA);
-      if (baselineA != -1) {
-        fSet = 1;
-      }
-    }
-    if (gSet == 0) {
-//      trainDur = flagReceive('g', '>', trainDur);
-      if (trainDur != -1) {
-        gSet = 1;
-      }
-    }
-    if (hSet == 0) {
-//      stimAmp_chanB = flagReceive('h', '>', stimAmp_chanB);
-      if (stimAmp_chanB != -1) {
-        hSet = 1;
-      }
-    }
-    if (iSet == 0) {
-//      pulseTimeB = flagReceive('i', '>', pulseTimeB);
-      if (pulseTimeB != -1) {
-        iSet = 1;
-      }
-    }
-    if (jSet == 0) {
-//      delayTimeB = flagReceive('j', '>', delayTimeB);
-      if (delayTimeB != -1) {
-        jSet = 1;
-      }
-    }
-    if (kSet == 0) {
-//      nPulseB = flagReceive('k', '>', nPulseB);
-      if (nPulseB != -1) {
-        kSet = 1;
-      }
-    }
-    if (lSet == 0) {
-//      baselineB = flagReceive('l', '>', baselineB);
-      if (baselineB != -1) {
-        lSet = 1;
-      }
-    }
-//    serDelayCounter = serDelayCounter + 1;
   }
 
-  if (pyState == 2) {
+  else if (pyState == 2) {
 
-    spitVars();
     // always increment time and see if we are out of it
     tTime = tTime + 1;
     if (tTime <= trainDur) {
+      pulsing=1;
 
       // **************************
       // a) ----  trigger stuff
@@ -410,6 +327,17 @@ void fStim() {
       digitalWrite(pulseB_LED, feedbackValB);
       spitData();
     }
+
+    else if (tTime>trainDur){
+      pulsing=0;
+      spitData();
+      analogWrite(dacPinA, 0);
+      analogWrite(dacPinB, 0);
+      readValA = analogRead(dacReadA);
+      readValB = analogRead(dacReadB);
+      digitalWrite(pulseA_LED, 0);
+      digitalWrite(pulseB_LED, 0);
+    }
   }
 }
 
@@ -419,31 +347,33 @@ void loop()
 
 
 void spitVars() {
+
   Serial.print("vars");
   Serial.print(',');
   Serial.print(pyState);
   Serial.print(',');
-  Serial.print(bSet);
+  Serial.print(pulseTimeA);
   Serial.print(',');
-  Serial.print(cSet);
+  Serial.print(delayTimeA);
   Serial.print(',');
-  Serial.print(dSet);
+  Serial.print(stimAmp_chanA);
   Serial.print(',');
-  Serial.print(eSet);
+  Serial.print(nPulseA);
   Serial.print(',');
-  Serial.print(fSet);
+  Serial.print(baselineA);
   Serial.print(',');
-  Serial.print(gSet);
+  Serial.print(pulseTimeB);
   Serial.print(',');
-  Serial.print(hSet);
+  Serial.print(delayTimeB);
   Serial.print(',');
-  Serial.print(iSet);
+  Serial.print(stimAmp_chanB);
   Serial.print(',');
-  Serial.print(jSet);
+  Serial.print(nPulseB);
   Serial.print(',');
-  Serial.print(kSet);
+  Serial.print(baselineB);
   Serial.print(',');
-  Serial.println(lSet);
+  Serial.println(trainDur);
+
 }
 
 
@@ -462,7 +392,7 @@ void spitData() {
   Serial.print(',');
   Serial.print(millis() - initArTime);
   Serial.print(',');
-  Serial.println(baselineA);
+  Serial.println(pulsing);
 }
 
 void clearBuffer() {
@@ -471,22 +401,42 @@ void clearBuffer() {
   }
 }
 
-int flagReceive(char startChars, char endChars, int targVar) {
+bool flagReceive() {
   static boolean recvInProgress = false;
   static byte ndx = 0;
-  char startMarker = startChars;
-  char endMarker = endChars;
+
+  char endMarker = '>';
   char rc;
-  bool notRight = 0;
-  int nVal = targVar;
+
+
+  int nVal;
+
   const byte numChars = 32;
   char writeChar[numChars];
-  bool newData = false;
+  bool newData = 0;
+  int selectedVar = 0;
 
-  while (Serial.available() > 0 && newData == false && notRight == 0) {
+
+
+  while (Serial.available() > 0 && newData == 0) {
+
+
     rc = Serial.read();
 
-    if (recvInProgress == true) {
+
+    if (recvInProgress == false) {
+      for ( int i = 0; i < 12; i++) {
+        if (rc == knownHeaders[i]) {
+          selectedVar = i;
+          recvInProgress = true;
+          Serial.println(selectedVar);
+          //          c1 = 1;
+        }
+      }
+    }
+
+
+    else if (recvInProgress == true) {
       if (rc != endMarker) {
         writeChar[ndx] = rc;
         ndx++;
@@ -494,20 +444,49 @@ int flagReceive(char startChars, char endChars, int targVar) {
           ndx = numChars - 1;
         }
       }
+
       else if (rc == endMarker ) {
         writeChar[ndx] = '\0'; // terminate the string
         recvInProgress = false;
         ndx = 0;
-        //        newData = true;
+        newData = 1;
+
         nVal = int(String(writeChar).toInt());
+        c1 = 3;
+        c2 = nVal;
+        knownValues[selectedVar] = nVal;
+        knownReset[selectedVar] = 1;
+
       }
     }
-    else if (rc == startMarker) {
-      recvInProgress = true;
-    }
-    else if (recvInProgress == false) {
-      notRight = 1;
-    }
   }
-  return nVal;
+  return newData;
+
+
 }
+
+
+void assignVars() {
+
+  pyState = knownValues[0];
+  pulseTimeA = knownValues[1];
+  delayTimeA = knownValues[2];
+  stimAmp_chanA = knownValues[3];
+  nPulseA = knownValues[4];
+  baselineA = knownValues[5];
+  pulseTimeB = knownValues[6];
+  delayTimeB = knownValues[7];
+  stimAmp_chanB = knownValues[8];
+  nPulseB = knownValues[9];
+  baselineB = knownValues[10];
+  trainDur = knownValues[11];
+
+}
+
+void resetVars() {
+  for ( int i = 0; i < 12; i++) {
+    knownReset[i] = 0;
+    knownValues[i] = -1;
+  }
+}
+
