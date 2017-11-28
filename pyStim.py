@@ -1,4 +1,4 @@
-# pyStim v0.96
+# pyStim v0.97
 # _________________
 # Works with microcontrollers that have hardward DACs, like the Teensy 3 line.
 # It is intended to be used with a Teensy3.5/3.6, both of which have 2 analog outs.
@@ -29,18 +29,18 @@ class psVariables:
 
 	def setSessionVars(self,idString):
 		sesVarD = {'currentSession':1,'dirPath':"/",\
-		'animalID':"an1",'uiUpdateSamps':250,'sRate':5000,\
+		'animalID':"an1",'uiUpdateSamps':250,'sRate':1000,\
 		'totalTrials':5,'sampsToPlot':5000,'comBoard':2762721,\
 		'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':8,\
 		'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':8,\
-		'serDelay':0.000001,'tNum':1,'tDur':2}
+		'serDelay':0.000001,'tNum':1,'tDur':2,'sessionNumber':1}
 
 		# dynamic
 		sesVarD['uiUpdateSamps']=int(sesVarD['sRate']/20)
 		sesVarD['sampsToPlot']=int(sesVarD['sRate']*1)
 		
 		exec('self.{}=sesVarD'.format(idString))
-		# self.sesVarD['sRate']
+		# self.sesVarD['animalID']
 		psVariables.dictToPandas(self,sesVarD,idString)
 
 
@@ -71,9 +71,9 @@ class psVariables:
 class psData:
 
 	def initSessionData(self):
-		psData.sessionStores='trialTime','preTime'
+		psData.sessionStores='trialNumber','trialTime','preTime','stimType','trialDuration','stimAmp_ChanA','stimAmp_ChanB'
 		for x in range(0,len(psData.sessionStores)):
-			exec('{}=[]'.format(psData.sessionStores[x]))
+			exec('psData.{}=[]'.format(psData.sessionStores[x]))
 
 	def initTrialData(self):
 		psData.trialStores='tm','v1','v2','rv1','rv2','tC','pS'
@@ -243,8 +243,6 @@ class psWindow:
 
 	def mwQuitBtn(self):
 
-		print('!!!! going down')
-		print('... closed the com obj')
 		exit()
 
 	def psWindowPopulate(self):
@@ -340,6 +338,7 @@ class psWindow:
 class psTypes:
 
 	def yup(self):
+		
 		print('who')
 
 class pyStim:
@@ -369,15 +368,16 @@ class pyStim:
 		psVariables.setPulseTrainVars(self,'ptVarD_chan0')
 		psVariables.setPulseTrainVars(self,'ptVarD_chan1')
 
-		
+		pyStim.connectTeensy(self)
 		while self.sesVarD['tNum']<=self.sesVarD['totalTrials']:
-			pyStim.connectTeensy(self)
-			print('connected')
+			# pyStim.connectTeensy(self)
+			print('start trial# {}'.format(self.sesVarD['tNum']))
 			self.initPulseTrain()			
 			self.pulseTrainTrial()
-			pyStim.cleanup(self)
 			self.sesVarD['tNum']=self.sesVarD['tNum']+1
 		print('done')
+		pyStim.saveSessionData(self)
+		pyStim.cleanup(self)
 
 	def cleanup(self):
 		
@@ -395,9 +395,45 @@ class pyStim:
 
 	def exportAnimalMeta(self):
 
-		self.sesVarD_Bindings.to_csv('sesVars.csv')
-		self.ptVarD_chan0_Bindings.to_csv('ptAVar.csv')
-		self.ptVarD_chan1_Bindings.to_csv('ptBVar.csv')
+		self.sesVarD_Bindings.to_csv('{}_s{}_sesVars.csv'.format(self.sesVarD['animalID'],self.sesVarD['currentSession']))
+		self.sesVarD_Bindings.to_csv('{}_sesVars.csv'.format(self.sesVarD['animalID']))
+
+	def saveTrialData(self):
+		tCo=[]
+		for x in range(0,len(psData.trialStores)):
+			tCo=eval('psData.{}'.format(psData.trialStores[x]))
+			if x==0:
+				rf=pd.DataFrame({'psData.{}'.format(psData.trialStores[x]):tCo})
+			elif x != 0:
+				tf=pd.DataFrame({'psData.{}'.format(psData.trialStores[x]):tCo})
+				rf=pd.concat([rf,tf],axis=1)
+
+		rf.to_csv('{}_trial_{}.csv'.format(self.sesVarD['animalID'],self.sesVarD['tNum']))
+
+	def updateSessionData(self):
+
+		psData.trialNumber.append(self.sesVarD['tNum'])
+		psData.trialTime.append(psData.tm[-1])
+		psData.preTime.append(psData.tC[0])
+		psData.stimType.append(self.s)
+		psData.trialDuration.append(self.tDur)
+		psData.stimAmp_ChanA.append((self.ptVarD_chan0['pulseAmpV']/3.3)*4095)
+		psData.stimAmp_ChanB.append((self.ptVarD_chan1['pulseAmpV']/3.3)*4095)
+
+	def saveSessionData(self):
+		tCo=[]
+		for x in range(0,len(psData.sessionStores)):
+			tCo=eval('psData.{}'.format(psData.sessionStores[x]))
+			if x==0:
+				rf=pd.DataFrame({'psData.{}'.format(psData.sessionStores[x]):tCo})
+			elif x != 0:
+				tf=pd.DataFrame({'psData.{}'.format(psData.sessionStores[x]):tCo})
+				rf=pd.concat([rf,tf],axis=1)
+
+		rf.to_csv('{}_session_{}.csv'.format(self.sesVarD['animalID'],self.sesVarD['sessionNumber']))
+		pyStim.exportAnimalMeta(self)
+		self.sesVarD['currentSession']=self.sesVarD['currentSession']+1
+
 
 	def updatePlotCheck(self):
 
@@ -430,11 +466,6 @@ class pyStim:
 
 			
 		self.current_milli_time = lambda: int(round(time.time() * 1000))
-		self.curVarState = lambda x: x==0 
-
-			
-
-		print('syncd')
 		self.initT=self.current_milli_time();
 		
 		self.resetVariables=0
@@ -468,7 +499,6 @@ class pyStim:
 							initSt=0  # debug
 							self.txBit=0
 							self.rxBit=0
-							print(self.tR)
 							self.s=sentState
 
 						
@@ -480,9 +510,7 @@ class pyStim:
 
 			elif self.s==0:
 
-				if initSt==0:
-					print('you made it to 0')
-					
+				if initSt==0:					
 					n=1
 					tDur=self.tDur
 					pAmpA=(self.ptVarD_chan0['pulseAmpV']/3.3)*4095
@@ -499,10 +527,7 @@ class pyStim:
 					pST=self.current_milli_time()
 					self.varsSent=0
 					self.resetVariables=1
-					# vars for 1
-					
-					initSt=1
-					print('initialized vars')
+					initSt=1					
 
 
 				if self.txBit==0:
@@ -518,15 +543,12 @@ class pyStim:
 					if self.rxBit:
 						sentState=int(self.tR[self.sNum])
 						if sentState == 1:
-							print('sentState={}'.format(sentState))
 							initSt=0  # debug
 							self.txBit=0
 							self.rxBit=0
-							print(self.tR)
 							self.s=sentState
 						
 						elif sentState != 1:
-							print('wrong sentState={}'.format(sentState))
 							self.txBit=0
 
 					elif self.rxBit==0 and waitCount>waitSamps:
@@ -600,8 +622,10 @@ class pyStim:
 				while self.collecting==0:
 					if initSt==0:
 						psPlot.updateLastTrialFig(self)
-						print(len(psData.tm))
 						initSt=1
+						pyStim.saveTrialData(self)
+						pyStim.updateSessionData(self)
+						
 
 					self.teensy.write('a0>'.encode('utf-8'))
 					self.inTrial ==0

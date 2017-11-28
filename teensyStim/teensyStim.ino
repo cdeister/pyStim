@@ -3,15 +3,16 @@
    I assume you have a 3.5 or 3.6 and have 2 outs. But you can easily go to 1.
    I use the builtin FlexiTimer2 to handle the interupts for timing.
 
-   v0.96
+   v0.97
    11/27/2017
    cdeister@brown.edu
+   # Anything that is licenseable is governed by an MIT License in the github directory.
 */
 
 #include <FlexiTimer2.h>
 
 // session params
-int sampsPerSecond = 5000; // samples per second (works well up to 5K, 10-20K with effort)
+int sampsPerSecond = 1000; // samples per second (works well up to 5K, 10-20K with effort)
 float evalEverySample = 1.0; // number of times to poll the stim funtion
 int trigTime = 0.01 * sampsPerSecond;
 
@@ -26,9 +27,7 @@ float initArTime;
 int pulsing=0;
 
 // train vals that get set in python
-int c1 = 0;
-int c2 = 0;
-int c3 = 0;
+
 
 char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'};
 int knownReset[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -423,7 +422,6 @@ bool flagReceive() {
           selectedVar = i;
           recvInProgress = true;
           Serial.println(selectedVar);
-          //          c1 = 1;
         }
       }
     }
@@ -445,8 +443,6 @@ bool flagReceive() {
         newData = 1;
 
         nVal = int(String(writeChar).toInt());
-        c1 = 3;
-        c2 = nVal;
         knownValues[selectedVar] = nVal;
         knownReset[selectedVar] = 1;
 
