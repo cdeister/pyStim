@@ -66,6 +66,10 @@ int serDelayCounter = 0;
 // general variable
 int readValA;
 int readValB;
+int readValC;
+int readValD;
+int readValE;
+int readValF;
 
 int trigAVal = 0;
 
@@ -92,6 +96,10 @@ const int dacPinB = A22;
 // analog inputs
 const int dacReadA = A9;
 const int dacReadB = A8;
+const int dacReadC = A5;
+const int dacReadD = A4;
+const int dacReadE = A3;
+const int dacReadF = A2;
 
 // feedback LEDs
 const int pulseA_LED = 13;
@@ -138,6 +146,7 @@ void fStim() {
     while (Serial.available()) {
       Serial.read();
     }
+    resetVars();
     tTime = 0;
 
     stateCounterA = 0;
@@ -313,8 +322,7 @@ void fStim() {
 
       analogWrite(dacPinA, writeValA);
       analogWrite(dacPinB, writeValB);
-      readValA = analogRead(dacReadA);
-      readValB = analogRead(dacReadB);
+      analogReads();
       digitalWrite(pulseA_LED, feedbackVal);
       digitalWrite(pulseB_LED, feedbackValB);
       spitData();
@@ -323,10 +331,12 @@ void fStim() {
     else if (tTime > trainDur) {
       pulsing = 0;
       spitData();
+      
       analogWrite(dacPinA, 0);
       analogWrite(dacPinB, 0);
-      readValA = analogRead(dacReadA);
-      readValB = analogRead(dacReadB);
+      
+      analogReads();
+      
       digitalWrite(pulseA_LED, 0);
       digitalWrite(pulseB_LED, 0);
     }
@@ -476,8 +486,7 @@ void fStim() {
 
       analogWrite(dacPinA, writeValA);
       analogWrite(dacPinB, writeValB);
-      readValA = analogRead(dacReadA);
-      readValB = analogRead(dacReadB);
+      analogReads();
       digitalWrite(pulseA_LED, feedbackVal);
       digitalWrite(pulseB_LED, feedbackValB);
       spitData();
@@ -488,8 +497,7 @@ void fStim() {
       spitData();
       analogWrite(dacPinA, 0);
       analogWrite(dacPinB, 0);
-      readValA = analogRead(dacReadA);
-      readValB = analogRead(dacReadB);
+      analogReads();
       digitalWrite(pulseA_LED, 0);
       digitalWrite(pulseB_LED, 0);
     }
@@ -544,6 +552,14 @@ void spitData() {
   Serial.print(readValA);
   Serial.print(',');
   Serial.print(readValB);
+  Serial.print(',');
+  Serial.print(readValC);
+  Serial.print(',');
+  Serial.print(readValD);
+  Serial.print(',');
+  Serial.print(readValE);
+  Serial.print(',');
+  Serial.print(readValF);
   Serial.print(',');
   Serial.print(millis() - initArTime);
   Serial.print(',');
@@ -652,5 +668,14 @@ int ramp(int voltage, int slope, int peakAmp) {
     voltage = 0;
   }
   return voltage;
+}
+
+void analogReads(){
+    readValA = analogRead(dacReadA);
+    readValB = analogRead(dacReadB);
+    readValC = analogRead(dacReadC);
+    readValD = analogRead(dacReadD);
+    readValE = analogRead(dacReadE);
+    readValF = analogRead(dacReadF);
 }
 

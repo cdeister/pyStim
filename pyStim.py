@@ -1,4 +1,4 @@
-# pyStim v0.98
+# pyStim v0.99
 # _________________
 # Works with microcontrollers that have hardward DACs, like the Teensy 3 line.
 # It is intended to be used with a Teensy3.5/3.6, both of which have 2 analog outs.
@@ -8,7 +8,10 @@
 # Chris Deister - cdeister@brown.edu
 # Anything that is licenseable is governed by an MIT License in the github directory. 
 
+# todo: amp CSV; end session button behavior; 
+# minor animal meta self.animalID_tv.set(os.path.basename(self.selectPath))
 
+# Import Dependencies
 from tkinter import *
 import tkinter.filedialog as fd
 import serial
@@ -28,27 +31,32 @@ import scipy.stats as stats
 class psVariables:
 
 	def setSessionVars(self,idString):
-		sesVarD = {'currentSession':1,'dirPath':"/",\
-		'animalID':"an1",'totalTrials':5,'uiUpdateSamps':250,'sRate':1000,\
-		'sampsToPlot':5000,'comBoard':2762721,\
-		'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':8,\
-		'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':8,\
-		'serDelay':0.000001,'tNum':1,'tDur':2,'sessionNumber':1}
 
-		# dynamic
-		sesVarD['uiUpdateSamps']=int(sesVarD['sRate']/20)
-		sesVarD['sampsToPlot']=int(sesVarD['sRate']*1)
-		
+		# edit the default dict if you like
+		sesVarD = {'currentSession':0,'dirPath':"/",\
+		'animalID':"an1",'totalTrials':5,'uiUpdateSamps':250,'sRate':1000,\
+		'sampsToPlot':5000,'comPath':"/dev/cu.usbmodem3165411",'fps':30,\
+		'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':8,\
+		'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':12,\
+		'tNum':1,'tDur':2,'timeToPlot':1}
+
 		exec('self.{}=sesVarD'.format(idString))
-		# self.sesVarD['dirPath']
+		# self.sesVarD['sRate']
+
+		exec('self.varsSet_{}=1'.format(idString))
+		print(self.varsSet_sesVarD)
 		psVariables.dictToPandas(self,sesVarD,idString)
 
-
 	def setPulseTrainVars(self,idString):
-
-		ptVarD = {'dwellTime':0.005,'pulseTime':0.01,'nPulses':20,\
-		'pulseAmpV':3.3,'baselineTime':0.5}
+		
+		# edit the default dict if you like
+		ptVarD = {'dwellTime':0.005,'pulseTime':0.05,'nPulses':20,\
+		'pulseAmpV':1.3,'baselineTime':0.5}
+		
 		exec('self.{}=ptVarD'.format(idString))
+		# hint self.ptVarD['dwellTime']
+		
+		exec('self.varsSet_{}=1'.format(idString))
 
 		psVariables.dictToPandas(self,ptVarD,idString)
 
@@ -65,22 +73,31 @@ class psVariables:
 		varIt=0
 		for k in list(pdName.index):
 			a=pdName[varIt]
-			dictName[k]=a
-			varIt=varIt+1
+			try:
+				a=float(a)
+				if a.is_integer():
+					a=int(a)
+				dictName[k]=a
+				varIt=varIt+1
+				print(type(a)) # debug
+			except:
+				dictName[k]=a
+				print(type(a)) # debug
+				varIt=varIt+1
 
 class psData:
 
 	def initSessionData(self):
-		psData.sessionStores='trialNumber','trialTime','preTime','stimType','trialDuration','stimAmp_ChanA','stimAmp_ChanB'
+		psData.sessionStores='trialNumber','trialTime','preTime','stimType',\
+		'trialDuration','stimAmp_ChanA','stimAmp_ChanB'
 		for x in range(0,len(psData.sessionStores)):
 			exec('psData.{}=[]'.format(psData.sessionStores[x]))
 
 	def initTrialData(self):
-		psData.trialStores='tm','v1','v2','rv1','rv2','tC','pS'
-		psData.trialStoresIDs=[1,2,3,4,5,6,7]
+		psData.trialStores='tm','v1','v2','rv1','rv2','rv3','rv4','rv5','rv6','tC','pS'
+		psData.trialStoresIDs=[1,2,3,4,5,6,7,8,9,10,11]
 		for x in range(0,len(psData.trialStores)): 
 			exec('psData.{}=[]'.format(psData.trialStores[x]))
-
 
 	def initTeensyStateData(self): # hacky
 
@@ -110,7 +127,9 @@ class psData:
 class psPlot:
 
 	def trialPlotFig(self):
-		# dT=np.divide(1,self.sesVarD['sRate'])
+		self.sesVarD['uiUpdateSamps']=int(self.sesVarD['sRate']/self.sesVarD['fps']) # gives 30 fps
+		self.sesVarD['sampsToPlot']=int(self.sesVarD['sRate']*self.sesVarD['timeToPlot']) 
+
 		plt.style.use('dark_background')
 		self.trialFramePosition='+370+0' # can be specified elsewhere
 		self.updateTrialAxes=0
@@ -141,12 +160,16 @@ class psPlot:
 		self.lastDataLine2,=self.lastTrialAxes.plot([1,1],color="cornflowerblue",lw=1)
 		plt.show(block=False)
 
-	
 	def updateTrialFig(self):
 		# dT=np.divide(1,self.sesVarD['sRate'])
+
+		# check to see if there is a change in plot control variables
+		self.sesVarD['uiUpdateSamps']=int(self.sesVarD['sRate']/self.sesVarD['fps']) # gives 30 fps
+		self.sesVarD['sampsToPlot']=int(self.sesVarD['sRate']*self.sesVarD['timeToPlot']) 
+
 		splt=int(self.sesVarD['sampsToPlot'])
-		posPltYData=np.array(psData.v1[-int(splt):])
-		posPltYData2=np.array(psData.v2[-int(splt):])
+		posPltYData=np.array(psData.rv1[-int(splt):])
+		posPltYData2=np.array(psData.rv2[-int(splt):])
 		x0=np.array(psData.tm[-int(splt):])
 		# x1=np.multiply(x0,dT)
 		# x0=[]
@@ -190,9 +213,6 @@ class psPlot:
 
 class psUtil:
 
-	def getPath(self):
-
-		self.selectPath = fd.askdirectory(title ="what what?")
 
 	def getFilePath(self):
 
@@ -224,33 +244,50 @@ class psUtil:
 
 	def refreshDictFromGui(self,dictName):
 		for key in list(dictName.keys()):
-			a=eval('self.{}_tv.get()'.format(key))
 			try:
-				a=float(a)
-				if a.is_integer():
-					a=int(a)
-				exec('dictName["{}"]={}'.format(key,a))
+				a=eval('self.{}_tv.get()'.format(key))
+				try:
+					a=float(a)
+					if a.is_integer():
+						a=int(a)
+					exec('dictName["{}"]={}'.format(key,a))
+					print('dictName["{}"]={}'.format(key,a))
+				except:
+					try:
+						exec('dictName["{}"]="{}"'.format(key,a))
+						print('dictName["{}"]={}'.format(key,a))
+					except:
+						print('dd except')
+						print('dictName["{}"]={}'.format(key,a))
 			except:
-				exec('dictName["{}"]="{}"'.format(key,a))
+				a=1+1
 
+		print(self.sesVarD['animalID'])
 
 	def refreshGuiFromDict(self,dictName):
 
 		for key in list(dictName.keys()):
-			eval('self.{}_tv.set(dictName["{}"])'.format(key,key))
-			print('self.{}_tv.set(dictName["{}"])'.format(key,key))
+			try:
+				eval('self.{}_tv.set(dictName["{}"])'.format(key,key))
+				print('self.{}_tv.set(dictName["{}"])'.format(key,key))
+			except:
+
+				print('self.{}_tv.set(dictName["{}"])'.format(key,key))
+
 
 	def exportAnimalMeta(self):
-		try:
-			tSavePath=self.sesDataPath + '/'
-		except:
-			tSavePath=self.dirPath_tv.get() + '/'
 
+		psUtil.refreshSubDirs(self)
+		psUtil.refreshDictFromGui(self,self.sesVarD)
+		print(self.sesVarD['animalID'])
 		psVariables.dictToPandas(self,self.sesVarD,'sesVarD')
-		self.sesVarD_Bindings.to_csv('{}{}_s{}_sesVars.csv'.\
-			format(tSavePath,self.sesVarD['animalID'],int(self.sesVarD['currentSession'])))
+		
+
+		self.sesVarD_Bindings.to_csv('{}{}_sesVars{}.csv'.\
+			format(self.sesDataPath,self.sesVarD['animalID'],int(self.sesVarD['currentSession'])))
+		
 		self.sesVarD_Bindings.to_csv('{}{}_sesVars.csv'.\
-			format(tSavePath,self.sesVarD['animalID']))
+			format(self.sesVarD['dirPath'],self.sesVarD['animalID']))
 
 	def mwLoadMetaBtn(self):
 		aa=fd.askopenfilename(title = "what what?",defaultextension='.csv')
@@ -264,11 +301,27 @@ class psUtil:
 			varVals.append(tempMeta.iloc[0][x])
 		psUtil.mapAssignStringEntries(self,varNames,varVals)
 
+	def refreshSubDirs(self):
+		self.sesVarD['dirPath']=self.selectPath + '/'
+		tempDirTS=datetime.datetime.fromtimestamp(time.time()).strftime('%m%d%Y')
+		self.todaySubPath=self.selectPath + '/' + tempDirTS
+
+
+		self.sesDataPath=self.todaySubPath + '/' + "sessionData" + '/'
+		self.trialDataPath=self.todaySubPath + '/' + "trialData" + '/'
+		print(os.path.exists(self.todaySubPath))
+		if os.path.exists(self.todaySubPath)==0:
+			os.mkdir(self.todaySubPath)
+		if os.path.exists(self.trialDataPath)==0:
+			os.mkdir(self.trialDataPath)
+		if os.path.exists(self.sesDataPath)==0:
+			os.mkdir(self.sesDataPath)
+
+		print('debug')
+		print(self.sesDataPath)
+
 class psWindow:
 
-	def blankLine(self,targ,startRow):
-		self.guiBuf=Label(targ, text="")
-		self.guiBuf.grid(row=startRow,column=0,sticky=W)
 
 	def mwQuitBtn(self):
 
@@ -278,15 +331,21 @@ class psWindow:
 
 		self.master.title("pyStim")
 		self.col2BW=10
+		
 		pStart=0
-		sesStart=pStart+8
-		mainStart=sesStart+7
+		serStart=pStart+3
+		sesStart=serStart+8
+		plotStart=sesStart+7
+		mainStart=plotStart+7
+
+		psWindow.addSerialBlock(self,serStart)
 		psWindow.addSessionBlock(self,sesStart)
+		psWindow.addPlotBlock(self,plotStart)
 		psWindow.addMainBlock(self,mainStart)
 
 	def addMainBlock(self,startRow):
 		self.startRow = startRow
-		# psWindow.blankLine(self.master,startRow)
+		self.blankLine(self.master,startRow)
 
 		self.mainCntrlLabel = Label(self.master, text="Main Controls:")\
 		.grid(row=startRow,column=0,sticky=W)
@@ -300,7 +359,7 @@ class psWindow:
 		self.startBtn.grid(row=startRow+1, column=0,sticky=W,padx=10)
 
 		self.endBtn = Button(self.master, text="End Task",width=self.col2BW, \
-			command=lambda:pdState.switchState(self,self.stMapD['endState']),state=NORMAL)
+			command=lambda:pdState.switchState(self,self.stMapD['endState']),state=DISABLED)
 		self.endBtn.grid(row=startRow+2, column=0,sticky=W,padx=10)
 
 	def addSessionBlock(self,startRow):
@@ -311,7 +370,7 @@ class psWindow:
 		self.dateStr = datetime.datetime.fromtimestamp(time.time()).\
 		strftime('%H:%M (%m/%d/%Y)')
 
-		# psWindow.blankLine(self.master,startRow)
+		self.blankLine(self.master,startRow)
 		self.sessionStuffLabel = Label(self.master,text="Session Stuff: ",justify=LEFT).\
 		grid(row=startRow+1, column=0,sticky=W)
 
@@ -357,13 +416,14 @@ class psWindow:
 		self.loadAnimalMetaBtn = Button(self.master,text = 'Load Metadata',\
 			width = self.col2BW,command = lambda: psWindow.mwLoadMetaBtn(self))
 		self.loadAnimalMetaBtn.grid(row=startRow+1, column=2)
-		self.loadAnimalMetaBtn.config(state=NORMAL)
+		self.loadAnimalMetaBtn.config(state=DISABLED)
 
 		self.saveCurrentMetaBtn=Button(self.master,text="Save Cur. Meta",\
 			command=lambda:psUtil.exportAnimalMeta(self), width=self.col2BW)
 		self.saveCurrentMetaBtn.grid(row=startRow+2,column=2)
 
 	def addSerialBlock(self,startRow):
+		
 		self.startRow = startRow
 
 		# @@@@@ --> Serial Block
@@ -376,7 +436,7 @@ class psWindow:
 		self.comPathEntry.config(width=24)
 		
 		if sys.platform == 'darwin':
-			self.comPath_tv.set('/dev/cu.usbmodem2762721')
+			self.comPath_tv.set(self.sesVarD['comPath'])
 		elif sys.platform == 'win':
 			self.comPath_tv.set('COM11')
 
@@ -385,7 +445,7 @@ class psWindow:
 		self.baudEntry_label.grid(row=startRow+2, column=0,sticky=W)
 
 		self.baudSelected=IntVar(self.master)
-		self.baudSelected.set(115200)
+		self.baudSelected.set(self.sesVarD['baudRate'])
 		self.baudPick = OptionMenu(self.master,\
 			self.baudSelected,115200,19200,9600)
 		self.baudPick.grid(row=startRow+2, column=0,sticky=E)
@@ -395,7 +455,7 @@ class psWindow:
 			text="Start Serial",width=self.col2BW, \
 			command=lambda: pdSerial.serial_initComObj(self))
 		self.createCom_button.grid(row=startRow+0, column=2)
-		self.createCom_button.config(state=NORMAL)
+		self.createCom_button.config(state=DISABLED)
 
 		self.syncComObj_button = Button(self.master,\
 			text="Sync Serial",width=self.col2BW, \
@@ -409,9 +469,56 @@ class psWindow:
 		self.closeComObj_button.grid(row=startRow+2, column=2)
 		self.closeComObj_button.config(state=DISABLED)
 
+	def addPlotBlock(self,startRow):
+		self.blankLine(self.master,startRow)
+		self.plotBlock_label = Label(self.master,text="Plotting:")
+		self.plotBlock_label.grid(row=startRow+1, column=0,sticky=W)
+		
+		self.sampsToPlot_label = Label(self.master,text="samples per plot:")
+		self.sampsToPlot_label.grid(row=startRow+2,column=0,sticky=W)
+		self.sampsToPlot_tv=StringVar(self.master)
+		self.sampsToPlot_entry=Entry(self.master,width=5,textvariable=\
+			self.sampsToPlot_tv)
+		self.sampsToPlot_entry.grid(row=startRow+2, column=0,sticky=E)
+		self.sampsToPlot_tv.set(str(self.sesVarD['sampsToPlot']))
+
+		self.uiUpdateSamps_label = Label(self.master, text="samples / UI update:")
+		self.uiUpdateSamps_label.grid(row=startRow+3, column=0,sticky=W)
+		self.uiUpdateSamps_tv=StringVar(self.master)
+		self.uiUpdateSamps_entry=Entry(self.master,width=5,textvariable=\
+			self.uiUpdateSamps_tv)
+		self.uiUpdateSamps_entry.grid(row=startRow+3, column=0,sticky=E)
+		self.uiUpdateSamps_tv.set(str(self.sesVarD['uiUpdateSamps']))
+
+		self.sRate_label = Label(self.master, text="teensy rate:")
+		self.sRate_label.grid(row=startRow+4, column=0,sticky=W)
+		self.sRate_tv=StringVar(self.master)
+		self.sRate_entry=Entry(self.master,width=5,textvariable=self.sRate_tv)
+		self.sRate_entry.grid(row=startRow+4, column=0,sticky=E)
+		self.sRate_tv.set(str(self.sesVarD['sRate']))
+
+
+		self.togglePlotWinBtn=Button(self.master,text = 'Toggle Plot',\
+			width=self.col2BW,\
+			command=lambda:psPlot.trialPlotFig(self))
+		self.togglePlotWinBtn.grid(row=startRow+2, column=2)
+		self.togglePlotWinBtn.config(state=NORMAL)
+
+
+
+
+		self.timeBase=1000000
+
 	def mwPathBtn(self):
 		
-		psUtil.getPath(self)
+		# 1 Get the path, or assume root.
+		try:
+			self.selectPath = fd.askdirectory(title ="what what?")
+			print(self.selectPath)
+		except:
+			self.selectPath='/'
+			print(self.selectPath)
+
 		self.dirPath_tv.set(self.selectPath)
 		self.pathEntry.config(bg='white')
 		self.animalID_tv.set(os.path.basename(self.selectPath))
@@ -442,34 +549,12 @@ class psWindow:
 			tempSesVar=pd.Series.from_csv(sesString)
 			psVariables.pandasToDict(self,tempSesVar,self.sesVarD)
 			psUtil.refreshGuiFromDict(self,self.sesVarD)
-
-		if self.loadedStates is True:
-			tempStMap=pd.Series.from_csv(stMapString)
-			psVariables.pandasToDict(self,tempStMap,self.stMapD)
-				
-		if self.loadedStateVars is True:
-			tempStateVars=pd.Series.from_csv(stVarString)
-			psVariables.pandasToDict(self,tempStateVars,self.stVarD)
 		
 		if self.loadedT1Probs is True:
 			tempT1Vars=pd.Series.from_csv(t1PString)
 			psVariables.pandasToDict(self,tempT1Vars,self.task1D)
 		
-		if self.loadedT2Probs is True:
-			tempT2Vars=pd.Series.from_csv(t2PString)
-			psVariables.pandasToDict(self,tempT2Vars,self.task2D)
-
-		tempDirTS=datetime.datetime.fromtimestamp(time.time()).strftime('%m%d%Y')
-		self.todaySubPath=self.selectPath + '/' + tempDirTS
-		self.sesDataPath=self.todaySubPath + '/' + "sessionData"
-		self.trialDataPath=self.todaySubPath + '/' + "trialData"
-		print(os.path.exists(self.todaySubPath))
-		if os.path.exists(self.todaySubPath)==0:
-			os.mkdir(self.todaySubPath)
-		if os.path.exists(self.trialDataPath)==0:
-			os.mkdir(self.trialDataPath)
-		if os.path.exists(self.sesDataPath)==0:
-			os.mkdir(self.sesDataPath)
+		psUtil.refreshSubDirs(self)
 		psVariables.dictToPandas(self,self.sesVarD,'sesVarD')
 		psUtil.setSessionPath(self)
 
@@ -497,47 +582,69 @@ class pyStim:
 		
 		psData.initSessionData(self)
 		psVariables.setSessionVars(self,'sesVarD')
-		self.lastTrial=(int(self.sesVarD['tNum'])-1)
+
+		# some of the session variables updates rely on time/sample conversions
+		self.sesVarD['uiUpdateSamps']=int(self.sesVarD['sRate']/self.sesVarD['fps']) # gives 30 fps
+		self.sesVarD['sampsToPlot']=int(self.sesVarD['sRate']*self.sesVarD['timeToPlot'])  
+		
+		# the last trial is either 0 on a cold start,
+		# or X+1 where X is the last trial you ran.
+		self.lastTrial=self.sesVarD['tNum']-1
 		print('debug: {}'.format(self.lastTrial))
 
-		
 		self.master = master
 		self.frame = Frame(self.master)
+		
 		root.wm_geometry("+0+0")
+		
 		psWindow.psWindowPopulate(self)
 		psPlot.trialPlotFig(self)
 
 	def connectTeensy(self):
-		baudRate=int(self.sesVarD['baudRate'])
-		boardNum=int(self.sesVarD['comBoard'])
-		self.teensy = serial.Serial('/dev/cu.usbmodem{}'.format(boardNum),baudRate)
-		
+
+		baudRate=self.baudSelected.get()
+		teensyPath=self.comPath_tv.get()
+		self.teensy = serial.Serial(teensyPath,baudRate)
+	
+	# This is the main show: 	
 	def runStimSession(self):
 		
-		psData.initSessionData(self)
 		psData.initTrialData(self)
-		psVariables.setPulseTrainVars(self,'ptVarD_chan0')
-		psVariables.setPulseTrainVars(self,'ptVarD_chan1')
 
-		pyStim.connectTeensy(self)
+		# todo: I enumerate here, to pave path for configurable channels.
+		self.analogOutChannels='chan0','chan1'
+		for x in range(0,len(self.analogOutChannels)):
+			eval('psVariables.setPulseTrainVars(self, "{}")'.format('ptVarD_' + self.analogOutChannels[x]))
+			
 		self.sesVarD['totalTrials']=int(self.totalTrials_tv.get())
-		self.sesVarD['currentSession']=int(self.currentSession_tv.get())
+		
+		self.sesVarD['currentSession']=int(self.currentSession_tv.get())+1
+		self.currentSession_tv.set('{}'.format(int(self.sesVarD['currentSession'])))
+		
 		psVariables.dictToPandas(self,self.sesVarD,'sesVarD')
 		self.lastTrial=int(self.sesVarD['tNum'])
+		
+		chanA_Amps=[0,1,2,3]
+		chanB_Amps=[1,2,2,1.1]
+		
+		pyStim.connectTeensy(self)
 		while (int(self.sesVarD['tNum'])-self.lastTrial)<int(self.sesVarD['totalTrials']):
+			
 			# pyStim.connectTeensy(self)
+			self.ptVarD_chan0['pulseAmpV']=chanA_Amps[np.random.randint(5)-1]
+			self.ptVarD_chan1['pulseAmpV']=chanB_Amps[np.random.randint(5)-1]
 			print('start trial# {}'.format(int(self.sesVarD['tNum'])))
 			self.initPulseTrain()			
 			self.pulseTrainTrial()
 			self.sesVarD['tNum']=int(self.sesVarD['tNum'])+1
 			self.sesVarD['totalTrials']=int(self.totalTrials_tv.get())
+			# pyStim.cleanup(self)
 		print('done')
+		pyStim.connectTeensy(self)
 		pyStim.saveSessionData(self)
-		self.sesVarD['currentSession']=int(self.sesVarD['currentSession'])+1
-		self.currentSession_tv.set('{}'.format(int(self.sesVarD['currentSession'])))
 		psVariables.dictToPandas(self,self.sesVarD,'sesVarD')
 
-		pyStim.cleanup(self)
+		# pyStim.cleanup(self)
 
 	def cleanup(self):
 		
@@ -553,7 +660,6 @@ class pyStim:
 			newData=0
 		return sR,newData
 
-
 	def saveTrialData(self):
 		self.dateSvStr = datetime.datetime.fromtimestamp(time.time()).strftime('%H%M_%m%d%Y')
 		tCo=[]
@@ -565,18 +671,14 @@ class pyStim:
 				tf=pd.DataFrame({'psData.{}'.format(psData.trialStores[x]):tCo})
 				rf=pd.concat([rf,tf],axis=1)
 
-		try:
-			tSavePath=self.trialDataPath + '/'
-		except:
-			tSavePath=self.dirPath_tv.get() + '/'
+		psUtil.refreshSubDirs(self)
 
-		#rf.to_csv('{}_trial_{}.csv'.format(self.sesVarD['animalID'],self.sesVarD['tNum']))
 
 		rf.to_csv('{}{}_{}_s{}_trial_{}.csv'.\
-			format(tSavePath,self.sesVarD['animalID'],self.dateSvStr, int(self.sesVarD['currentSession']),int(self.sesVarD['tNum'])))
+			format(self.trialDataPath,self.sesVarD['animalID'],self.dateSvStr,\
+			 int(self.sesVarD['currentSession']),int(self.sesVarD['tNum'])))
 		self.trialDataExists=0
 
-	
 	def updateSessionData(self):
 
 		psData.trialNumber.append(int(self.sesVarD['tNum']))
@@ -591,11 +693,6 @@ class pyStim:
 		self.dateSvStr = datetime.datetime.fromtimestamp(time.time()).\
 		strftime('%H%M_%m%d%Y')
 
-		try:
-			tSavePath=self.sesDataPath + '/'
-		except:
-			tSavePath=self.dirPath_tv.get() + '/'
-			
 		tCo=[]
 		for x in range(0,len(psData.sessionStores)):
 			tCo=eval('psData.{}'.format(psData.sessionStores[x]))
@@ -607,14 +704,13 @@ class pyStim:
 					format(psData.sessionStores[x]):tCo})
 				rf=pd.concat([rf,tf],axis=1)
 
-		# rf.to_csv('{}_session_{}.csv'.\
-		# 	format(self.sesVarD['animalID'],self.sesVarD['sessionNumber']))
+		psUtil.refreshSubDirs(self)
 		rf.to_csv('{}{}_{}_s{}_sessionData.csv'.\
-			format(tSavePath,self.sesVarD['animalID'],self.dateSvStr, int(self.sesVarD['currentSession'])))
+			format(self.sesDataPath,self.sesVarD['animalID'],self.dateSvStr,\
+			 int(self.sesVarD['currentSession'])))
 		self.sessionDataExists=0
 
 		psUtil.exportAnimalMeta(self)
-
 
 	def updatePlotCheck(self):
 
@@ -651,7 +747,12 @@ class pyStim:
 		self.rxBit=0
 		self.txBit=0
 
+	def blankLine(self,targ,startRow):
+		self.guiBuf=Label(targ, text="")
+		self.guiBuf.grid(row=startRow,column=0,sticky=W)
+		
 	def pulseTrainTrial(self):
+
 		waitSamps=30*int(self.sesVarD['sRate'])
 		while self.inTrial ==1:
 			# handshake with teensy. we start in -1, but want to go to 0
