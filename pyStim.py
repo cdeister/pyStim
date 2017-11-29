@@ -61,7 +61,6 @@ class psVariables:
 		psVariables.dictToPandas(self,ptVarD,idString)
 
 	def dictToPandas(self,dictName,idString):
-
 		tLab=[]
 		tVal=[]
 		for key in list(dictName.keys()):
@@ -287,7 +286,7 @@ class psUtil:
 			format(self.sesDataPath,self.sesVarD['animalID'],int(self.sesVarD['currentSession'])))
 		
 		self.sesVarD_Bindings.to_csv('{}{}_sesVars.csv'.\
-			format(self.sesVarD['dirPath'],self.sesVarD['animalID']))
+			format(self.sesVarD['dirPath'] + "/" ,self.sesVarD['animalID']))
 
 	def mwLoadMetaBtn(self):
 		aa=fd.askopenfilename(title = "what what?",defaultextension='.csv')
@@ -411,7 +410,10 @@ class psWindow:
 			self.currentSession_tv,width=10)
 		self.curSession_entry.grid(row=startRow+6,column=0,sticky=E)
 
-
+		self.taskProbsBtn = Button(self.master,text='Output Vars',\
+			width=self.col2BW,command=self.taskProbWindow)
+		self.taskProbsBtn.grid(row=startRow+4, column=2)
+		self.taskProbsBtn.config(state=NORMAL)
 
 		self.loadAnimalMetaBtn = Button(self.master,text = 'Load Metadata',\
 			width = self.col2BW,command = lambda: psWindow.mwLoadMetaBtn(self))
@@ -504,11 +506,6 @@ class psWindow:
 		self.togglePlotWinBtn.grid(row=startRow+2, column=2)
 		self.togglePlotWinBtn.config(state=NORMAL)
 
-
-
-
-		self.timeBase=1000000
-
 	def mwPathBtn(self):
 		
 		# 1 Get the path, or assume root.
@@ -572,9 +569,8 @@ class psWindow:
 
 class psTypes:
 
-	def yup(self):
-		
-		print('who')
+	def yo(self):
+		a="what"
 
 class pyStim:
 
@@ -590,8 +586,8 @@ class pyStim:
 		# the last trial is either 0 on a cold start,
 		# or X+1 where X is the last trial you ran.
 		self.lastTrial=self.sesVarD['tNum']-1
-		print('debug: {}'.format(self.lastTrial))
-
+		
+		pyStim.configChans(self)
 		self.master = master
 		self.frame = Frame(self.master)
 		
@@ -606,18 +602,20 @@ class pyStim:
 		teensyPath=self.comPath_tv.get()
 		self.teensy = serial.Serial(teensyPath,baudRate)
 	
-	# This is the main show: 	
-	def runStimSession(self):
-		
-		psData.initTrialData(self)
-
+	def configChans(self):
 		# todo: I enumerate here, to pave path for configurable channels.
 		self.analogOutChannels='chan0','chan1'
 		for x in range(0,len(self.analogOutChannels)):
-			eval('psVariables.setPulseTrainVars(self, "{}")'.format('ptVarD_' + self.analogOutChannels[x]))
-			
-		self.sesVarD['totalTrials']=int(self.totalTrials_tv.get())
+			eval('psVariables.setPulseTrainVars(self, "{}")'.format('ptVarD_' +\
+			 self.analogOutChannels[x]))
+	
+	# This is the main show: 	
+	def runStimSession(self):
 		
+		pyStim.configChans(self)
+		psData.initTrialData(self)
+		
+		self.sesVarD['totalTrials']=int(self.totalTrials_tv.get())
 		self.sesVarD['currentSession']=int(self.currentSession_tv.get())+1
 		self.currentSession_tv.set('{}'.format(int(self.sesVarD['currentSession'])))
 		
@@ -626,6 +624,7 @@ class pyStim:
 		
 		chanA_Amps=[0,1,2,3]
 		chanB_Amps=[1,2,2,1.1]
+
 		
 		pyStim.connectTeensy(self)
 		while (int(self.sesVarD['tNum'])-self.lastTrial)<int(self.sesVarD['totalTrials']):
@@ -633,16 +632,19 @@ class pyStim:
 			# pyStim.connectTeensy(self)
 			self.ptVarD_chan0['pulseAmpV']=chanA_Amps[np.random.randint(5)-1]
 			self.ptVarD_chan1['pulseAmpV']=chanB_Amps[np.random.randint(5)-1]
+			pyStim.taskProbRefreshBtnCB(self)
 			print('start trial# {}'.format(int(self.sesVarD['tNum'])))
 			self.initPulseTrain()			
 			self.pulseTrainTrial()
+			pyStim.saveTrialData(self)
+			pyStim.updateSessionData(self)
 			self.sesVarD['tNum']=int(self.sesVarD['tNum'])+1
 			self.sesVarD['totalTrials']=int(self.totalTrials_tv.get())
-			# pyStim.cleanup(self)
 		print('done')
-		pyStim.connectTeensy(self)
+		self.teensy.close()
 		pyStim.saveSessionData(self)
 		psVariables.dictToPandas(self,self.sesVarD,'sesVarD')
+
 
 		# pyStim.cleanup(self)
 
@@ -750,7 +752,59 @@ class pyStim:
 	def blankLine(self,targ,startRow):
 		self.guiBuf=Label(targ, text="")
 		self.guiBuf.grid(row=startRow,column=0,sticky=W)
+
+	def taskProbWindow(self):
+		tb_frame = Toplevel()
+		tb_frame.title('Output Vars')
+		self.tb_frame=tb_frame
+		self.populateVarFrameFromDict(self.ptVarD_chan0,0,0,'chan0','tb_frame','chan0_')
+		self.populateVarFrameFromDict(self.ptVarD_chan1,2,0,'chan1','tb_frame','chan1_')
+
+		# # for x in range(0,len(self.analogOutChannels)):
+
+		# 	print('self.populateVarFrameFromDict("{}",{},{},chan_{},tb_frame)'.format('self.ptVarD_' + self.analogOutChannels[x],sC[x],vpC[x]))
+		# 	eval('self.populateVarFrameFromDict("{}",{},{},chan_{},tb_frame)'.format('self.ptVarD_' + self.analogOutChannels[x],sC[x],vpC[x]))
+
 		
+		# self.setTaskProbsBtn = Button(tb_frame,text='Set Probs.',width = 10,\
+		# 	command = lambda: self.taskProbRefreshBtnCB())
+		# self.setTaskProbsBtn.grid(row=len(self.ptVarD_chan0)+2, column=0)
+
+	def taskProbRefreshBtnCB(self):
+		try:
+			self.populateVarFrameFromDict(self.ptVarD_chan0,0,0,'chan0','tb_frame','chan0_')
+			self.populateVarFrameFromDict(self.ptVarD_chan1,2,0,'chan1','tb_frame','chan1_')
+		except:
+			a=1+1
+		# pyStim.configChans(self)
+		# for x in range(0,len(self.analogOutChannels)):
+		# 	eval('psUtil.refreshDictFromGui(self, "{}")'.format('self.ptVarD_' +\
+		# 	 self.analogOutChannels[x]))
+
+	def populateVarFrameFromDict(self,dictName,stCol,varPerCol,headerString,frameName,preString):
+		rowC=2
+		stBCol=stCol+1
+		spillCount=0
+		exec('r_label = Label(self.{}, text="{}",justify=LEFT)'.format(frameName,headerString))
+		exec('r_label.grid(row=1,column=stCol)'.format(dictName))
+		for key in list(dictName.keys()):
+			if varPerCol != 0:
+				if (rowC % varPerCol)==0:
+					rowC=2
+					spillCount=spillCount+1
+					stCol=stCol+(spillCount+1)
+					stBCol=stCol+(spillCount+2)
+			
+			exec('self.{}_tv=StringVar(self.{})'.format(preString + key,frameName))
+			exec('self.{}_label = Label(self.{}, text="{}")'.format(preString + key,frameName,key))
+			exec('self.{}_entries=Entry(self.{},width=5,textvariable=self.{}_tv)'.format(preString + key,frameName, preString + key))
+			exec('self.{}_label.grid(row={},column=stBCol)'.format(preString + key,rowC))
+			exec('self.{}_entries.grid(row={},column=stCol)'.format(preString + key,rowC))
+			exec('self.{}_tv.set({})'.format(preString + key,dictName[key]))
+			print('self.{}_tv.set({})'.format(preString + key,dictName[key]))
+			
+			rowC=rowC+1
+
 	def pulseTrainTrial(self):
 
 		waitSamps=30*int(self.sesVarD['sRate'])
@@ -903,13 +957,12 @@ class pyStim:
 					if initSt==0:
 						psPlot.updateLastTrialFig(self)
 						initSt=1
-						pyStim.saveTrialData(self)
-						pyStim.updateSessionData(self)
 						
 
 					self.teensy.write('a0>'.encode('utf-8'))
 					self.inTrial ==0
 					return()
+		
 
 root = Tk()
 app = pyStim(root)
