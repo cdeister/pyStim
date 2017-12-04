@@ -11,8 +11,10 @@
 
 #include <FlexiTimer2.h>
 
+
+
 // session params
-int sampsPerSecond = 1000; // samples per second (works well up to 5K, 10-20K with effort)
+int sampsPerSecond = 2000; // samples per second (works well up to 5K, 10-20K with effort)
 float evalEverySample = 1.0; // number of times to poll the stim funtion
 int trigTime = 0.01 * sampsPerSecond;
 
@@ -102,7 +104,7 @@ const int dacReadE = A3;
 const int dacReadF = A2;
 
 // feedback LEDs
-const int pulseA_LED = 13;
+const int pulseA_LED = 15;
 const int pulseB_LED = 14;
 
 // triggers
@@ -114,6 +116,7 @@ void setup() {
   Serial.begin(115200);
   delay(2);
   analogWriteResolution(12);
+  analogReadResolution(13);
   pinMode(pulseA_LED, OUTPUT);
   pinMode(pulseB_LED, OUTPUT);
   pinMode(scopeTrigger, OUTPUT);
@@ -158,7 +161,7 @@ void fStim() {
 
     flushState = 0;
 
-    initArTime = millis();
+    //initArTime = millis();
     assignVars();
     feedbackVal = 0;
     feedbackValB = 1;
@@ -178,7 +181,7 @@ void fStim() {
   // STATE #1 is the init state.
   // **********************************
   else if (pyState == 1) {
-
+    initArTime = millis();
 
   }
 
@@ -330,7 +333,7 @@ void fStim() {
 
     else if (tTime > trainDur) {
       pulsing = 0;
-      spitData();
+      //spitData();
       
       analogWrite(dacPinA, 0);
       analogWrite(dacPinB, 0);
@@ -494,7 +497,7 @@ void fStim() {
 
     else if (tTime > trainDur) {
       pulsing = 0;
-      spitData();
+//      spitData();
       analogWrite(dacPinA, 0);
       analogWrite(dacPinB, 0);
       analogReads();
@@ -541,6 +544,7 @@ void spitVars() {
 
 
 void spitData() {
+  
   Serial.print("data");
   Serial.print(',');
   Serial.print(tTime);
