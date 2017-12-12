@@ -2,7 +2,7 @@
    Notes: Teensey 3.5/3.6 has two built in 12 bit dacs.
    I assume you have a 3.5 or 3.6 and have 2 outs. But you can easily go to 1.
    I use the builtin FlexiTimer2 to handle the interupts for timing.
-   v1.01
+   v0.97
    11/27/2017
    cdeister@brown.edu
    # Anything that is licenseable is governed by an MIT License in the github directory.
@@ -12,7 +12,7 @@
 #include <SD.h>
 #include <SPI.h>
 
-
+const int chipSelect = BUILTIN_SDCARD;
 
 // session params
 int sampsPerSecond = 2000; // samples per second (works well up to 5K, 10-20K with effort)
@@ -26,7 +26,7 @@ int pulseCounterA = 0;
 int pulseCounterB = 0;
 float tTime = 0;
 float initArTime;
-const int chipSelect = BUILTIN_SDCARD;
+
 int pulsing = 0;
 
 // train vals that get set in python
@@ -81,6 +81,7 @@ int writeValB = 0;
 
 
 
+
 // boolean toggles
 bool feedbackVal = 0;
 bool feedbackValB = 0;
@@ -104,20 +105,18 @@ const int dacReadE = A3;
 const int dacReadF = A2;
 
 // feedback LEDs
-const int pulseA_LED = 15;
+const int pulseA_LED = 13;
 const int pulseB_LED = 14;
 
 // triggers
 const int scopeTrigger = 6;
-
+File dataFile = SD.open("datalog1.txt", FILE_WRITE);
 
 void setup() {
-  SD.begin(chipSelect);
-  
+//  File dataFile = SD.open("datalog1.txt", FILE_WRITE);
   Serial.begin(115200);
   delay(2);
   analogWriteResolution(12);
-  analogReadResolution(13);
   pinMode(pulseA_LED, OUTPUT);
   pinMode(pulseB_LED, OUTPUT);
   pinMode(scopeTrigger, OUTPUT);
@@ -128,7 +127,6 @@ void setup() {
 
 
 void fStim() {
-  
 
   // always look for new info from python.
   bool p = flagReceive();
@@ -163,7 +161,7 @@ void fStim() {
 
     flushState = 0;
 
-    //initArTime = millis();
+    initArTime = millis();
     assignVars();
     feedbackVal = 0;
     feedbackValB = 1;
@@ -174,6 +172,7 @@ void fStim() {
     scopeTriggered = 0;
     writeValA = 0;
     writeValB = 0;
+    
 
   }
 
@@ -183,7 +182,7 @@ void fStim() {
   // STATE #1 is the init state.
   // **********************************
   else if (pyState == 1) {
-    initArTime = millis();
+
 
   }
 
@@ -249,13 +248,13 @@ void fStim() {
       // pulse state A
       if (inPulseA == 1) {
         stateCounterA = stateCounterA + 1;
-        if (stateCounterA < pulseTimeA) {
+        if (stateCounterA <= pulseTimeA) {
           feedbackVal = 1;
           writeValA = stimAmp_chanA;
         }
 
         // exit A
-        else if (stateCounterA >= pulseTimeA) {
+        else if (stateCounterA > pulseTimeA) {
           stateCounterA = 0;
           inPulseA = 0;
         }
@@ -305,14 +304,14 @@ void fStim() {
       if (inPulseB == 1) {
 
         stateCounterB = stateCounterB + 1;
-        if (stateCounterB < pulseTimeB) {
+        if (stateCounterB <= pulseTimeB) {
           feedbackValB = 1;
           writeValB = stimAmp_chanB;
           
         }
 
-        // exit B
-        else if (stateCounterB >= pulseTimeB) {
+        // exit A
+        else if (stateCounterB > pulseTimeB) {
           stateCounterB = 0;
           inPulseB = 0;
         }
@@ -335,7 +334,7 @@ void fStim() {
 
     else if (tTime > trainDur) {
       pulsing = 0;
-      //spitData();
+      spitData();
       
       analogWrite(dacPinA, 0);
       analogWrite(dacPinB, 0);
@@ -546,7 +545,6 @@ void spitVars() {
 
 
 void spitData() {
-  
   Serial.print("data");
   Serial.print(',');
   Serial.print(tTime);
@@ -570,33 +568,30 @@ void spitData() {
   Serial.print(millis() - initArTime);
   Serial.print(',');
   Serial.println(pulsing);
-  
-  //File dataFile = SD.open("datalog6.txt", FILE_WRITE);
-//  dataFile.print("data");
-//  dataFile.print(',');
-//  dataFile.print(tTime);
-//  dataFile.print(',');
-//  dataFile.print(writeValA);
-//  dataFile.print(',');
-//  dataFile.print(writeValB);
-//  dataFile.print(',');
-//  dataFile.print(readValA);
-//  dataFile.print(',');
-//  dataFile.print(readValB);
-//  dataFile.print(',');
-//  dataFile.print(readValC);
-//  dataFile.print(',');
-//  dataFile.print(readValD);
-//  dataFile.print(',');
-//  dataFile.print(readValE);
-//  dataFile.print(',');
-//  dataFile.print(readValF);
-//  dataFile.print(',');
-//  dataFile.print(millis() - initArTime);
-//  dataFile.print(',');
-  //dataFile.println(millis() - initArTime);
 
-//  dataFile.close();
+  dataFile.print("data");
+  dataFile.print(',');
+  dataFile.print(tTime);
+  dataFile.print(',');
+  dataFile.print(writeValA);
+  dataFile.print(',');
+  dataFile.print(writeValB);
+  dataFile.print(',');
+  dataFile.print(readValA);
+  dataFile.print(',');
+  dataFile.print(readValB);
+  dataFile.print(',');
+  dataFile.print(readValC);
+  dataFile.print(',');
+  dataFile.print(readValD);
+  dataFile.print(',');
+  dataFile.print(readValE);
+  dataFile.print(',');
+  dataFile.print(readValF);
+  dataFile.print(',');
+  dataFile.print(millis() - initArTime);
+  dataFile.print(',');
+  dataFile.println(pulsing);
 }
 
 void clearBuffer() {
