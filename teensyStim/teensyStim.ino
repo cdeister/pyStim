@@ -9,87 +9,49 @@
 */
 
 #include <FlexiTimer2.h>
-#include <SD.h>
 #include <SPI.h>
 
-
+int adcResolution = 12; // in bits; res of ADCs
+int dacResolution = 12; // in bits; res of DACs
 
 // session params
-int sampsPerSecond = 2000; // samples per second (works well up to 5K, 10-20K with effort)
+int sampsPerSecond = 1000; // samples per second (works well up to 5K, 10-20K with effort)
 float evalEverySample = 1.0; // number of times to poll the stim funtion
 int trigTime = 0.01 * sampsPerSecond;
 
-// initialize counters
+// initialize counters & state vars.
+
 float stateCounterA = 0;
 float stateCounterB = 0;
 int pulseCounterA = 0;
 int pulseCounterB = 0;
+
+// init time refs.
 float tTime = 0;
 float initArTime;
-const int chipSelect = BUILTIN_SDCARD;
+
 int pulsing = 0;
 
-// train vals that get set in python
-
-
+// train vals that we look for (set elsewhere; python)
 char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'};
-int knownReset[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int knownValues[] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-int varRec = 0;
 
 // init vars
 int pyState = knownValues[0];
-
-int  pulseTimeA = knownValues[1];
-int  delayTimeA = knownValues[2];
-int  stimAmp_chanA = knownValues[3];
-int  nPulseA = knownValues[4];
+int pulseTimeA = knownValues[1];
+int delayTimeA = knownValues[2];
+int stimAmp_chanA = knownValues[3];
+int nPulseA = knownValues[4];
 int baselineA = knownValues[5];
-
-int  pulseTimeB = knownValues[6];
-int  delayTimeB = knownValues[7];
+int pulseTimeB = knownValues[6];
+int delayTimeB = knownValues[7];
 int stimAmp_chanB = knownValues[8];
-int  nPulseB = knownValues[9];
+int nPulseB = knownValues[9];
 int baselineB = knownValues[10];
-
 int trainDur = knownValues[11];
 
-
-int tSlopeA=500;
-int tSlopeB=500;
-
-
-
-
-// if you want to add delays it has to be counterbased
-int serialDelay = 0.1 * sampsPerSecond;
-int serDelayCounter = 0;
-
-
-// general variable
-int readValA;
-int readValB;
-int readValC;
-int readValD;
-int readValE;
-int readValF;
-
-int trigAVal = 0;
-
-int writeValA = 0;
-int writeValB = 0;
-
-
-
-// boolean toggles
-bool feedbackVal = 0;
-bool feedbackValB = 0;
-bool inPulseA = 0;
-bool inPulseB = 0;
-bool baselineAComp = 0;
-bool baselineBComp = 0;
-bool scopeTriggered = 0;
-bool flushState = 0;
+int tSlopeA = 500;
+int tSlopeB = 500;
 
 // analog outputs
 const int dacPinA = A21;
@@ -103,45 +65,65 @@ const int dacReadD = A4;
 const int dacReadE = A3;
 const int dacReadF = A2;
 
-// feedback LEDs
-const int pulseA_LED = 15;
-const int pulseB_LED = 14;
-
-// triggers
+// trigger outs
 const int scopeTrigger = 6;
 
+// general variables
+int trigAVal;
+int readValA;
+int readValB;
+int readValC;
+int readValD;
+int readValE;
+int readValF;
+int writeValA;
+int writeValB;
+
+// boolean toggles
+bool feedbackVal = 0;
+bool feedbackValB = 0;
+bool inPulseA = 0;
+bool inPulseB = 0;
+bool baselineAComp = 0;
+bool baselineBComp = 0;
+bool scopeTriggered = 0;
+bool flushState = 0;
+
+// feedback LEDs
+const int pulseA_LED = 13;
+const int pulseB_LED = 14;
 
 void setup() {
-  SD.begin(chipSelect);
-  
+
   Serial.begin(115200);
   delay(2);
-  analogWriteResolution(12);
-  analogReadResolution(13);
+
+  analogWriteResolution(dacResolution);
+  analogReadResolution(adcResolution);
+
   pinMode(pulseA_LED, OUTPUT);
   pinMode(pulseB_LED, OUTPUT);
   pinMode(scopeTrigger, OUTPUT);
   FlexiTimer2::set(1, evalEverySample / sampsPerSecond, fStim); // call ever
   FlexiTimer2::start();
+
 }
 
-
+// pyStim is interrupt based
+// so fStim is the main "loop"
+// we have to time a function, not run a loop.
 
 void fStim() {
-  
+
 
   // always look for new info from python.
-  bool p = flagReceive();
+  bool p = flagReceive(knownHeaders, knownValues);
   if (p == 1) {
 
     assignVars();
     spitVars();
 
   }
-
-
-
-
 
   // **********************************
   // STATE #O is the reset/rest state.
@@ -163,7 +145,6 @@ void fStim() {
 
     flushState = 0;
 
-    //initArTime = millis();
     assignVars();
     feedbackVal = 0;
     feedbackValB = 1;
@@ -237,10 +218,10 @@ void fStim() {
         else if (stateCounterA > delayTimeA) {
           stateCounterA = 0;
           pulseCounterA = pulseCounterA + 1;
-          if (pulseCounterA <= nPulseA) {
+          if (pulseCounterA < nPulseA) {
             inPulseA = 1;
           }
-          else if (pulseCounterA > nPulseA) {
+          else if (pulseCounterA >= nPulseA) {
             inPulseA = 0;
           }
         }
@@ -292,10 +273,10 @@ void fStim() {
         else if (stateCounterB > delayTimeB) {
           stateCounterB = 0;
           pulseCounterB = pulseCounterB + 1;
-          if (pulseCounterB <= nPulseB) {
+          if (pulseCounterB < nPulseB) {
             inPulseB = 1;
           }
-          else if (pulseCounterB > nPulseB) {
+          else if (pulseCounterB >= nPulseB) {
             inPulseB = 0;
           }
         }
@@ -308,7 +289,7 @@ void fStim() {
         if (stateCounterB < pulseTimeB) {
           feedbackValB = 1;
           writeValB = stimAmp_chanB;
-          
+
         }
 
         // exit B
@@ -336,12 +317,12 @@ void fStim() {
     else if (tTime > trainDur) {
       pulsing = 0;
       //spitData();
-      
+
       analogWrite(dacPinA, 0);
       analogWrite(dacPinB, 0);
-      
+
       analogReads();
-      
+
       digitalWrite(pulseA_LED, 0);
       digitalWrite(pulseB_LED, 0);
     }
@@ -398,11 +379,11 @@ void fStim() {
         else if (stateCounterA > delayTimeA) {
           stateCounterA = 0;
           pulseCounterA = pulseCounterA + 1;
-          if (pulseCounterA <= nPulseA) {
+          if (pulseCounterA < nPulseA) {
             inPulseA = 1;
-            writeValA=0; // reset to 0 for ramp.
+            writeValA = 0; // reset to 0 for ramp.
           }
-          else if (pulseCounterA > nPulseA) {
+          else if (pulseCounterA >= nPulseA) {
             inPulseA = 0;
           }
         }
@@ -413,7 +394,7 @@ void fStim() {
         stateCounterA = stateCounterA + 1;
         if (stateCounterA <= pulseTimeA) {
           feedbackVal = 1;
-          writeValA=ramp(writeValA,tSlopeA,stimAmp_chanA);
+          writeValA = ramp(writeValA, tSlopeA, stimAmp_chanA);
           writeValA = stimAmp_chanA;
         }
 
@@ -455,11 +436,11 @@ void fStim() {
         else if (stateCounterB > delayTimeB) {
           stateCounterB = 0;
           pulseCounterB = pulseCounterB + 1;
-          if (pulseCounterB <= nPulseB) {
+          if (pulseCounterB < nPulseB) {
             inPulseB = 1;
-            writeValB=0;
+            writeValB = 0;
           }
-          else if (pulseCounterB > nPulseB) {
+          else if (pulseCounterB >= nPulseB) {
             inPulseB = 0;
           }
         }
@@ -471,8 +452,8 @@ void fStim() {
         stateCounterB = stateCounterB + 1;
         if (stateCounterB <= pulseTimeB) {
           feedbackValB = 1;
-          writeValB=ramp(writeValB,tSlopeB,stimAmp_chanB);
-          
+          writeValB = ramp(writeValB, tSlopeB, stimAmp_chanB);
+
         }
 
         // exit A
@@ -499,7 +480,7 @@ void fStim() {
 
     else if (tTime > trainDur) {
       pulsing = 0;
-//      spitData();
+      //      spitData();
       analogWrite(dacPinA, 0);
       analogWrite(dacPinB, 0);
       analogReads();
@@ -546,7 +527,7 @@ void spitVars() {
 
 
 void spitData() {
-  
+
   Serial.print("data");
   Serial.print(',');
   Serial.print(tTime);
@@ -570,74 +551,31 @@ void spitData() {
   Serial.print(millis() - initArTime);
   Serial.print(',');
   Serial.println(pulsing);
-  
-  //File dataFile = SD.open("datalog6.txt", FILE_WRITE);
-//  dataFile.print("data");
-//  dataFile.print(',');
-//  dataFile.print(tTime);
-//  dataFile.print(',');
-//  dataFile.print(writeValA);
-//  dataFile.print(',');
-//  dataFile.print(writeValB);
-//  dataFile.print(',');
-//  dataFile.print(readValA);
-//  dataFile.print(',');
-//  dataFile.print(readValB);
-//  dataFile.print(',');
-//  dataFile.print(readValC);
-//  dataFile.print(',');
-//  dataFile.print(readValD);
-//  dataFile.print(',');
-//  dataFile.print(readValE);
-//  dataFile.print(',');
-//  dataFile.print(readValF);
-//  dataFile.print(',');
-//  dataFile.print(millis() - initArTime);
-//  dataFile.print(',');
-  //dataFile.println(millis() - initArTime);
 
-//  dataFile.close();
 }
 
-void clearBuffer() {
-  while (Serial.available()) {
-    Serial.read();
-  }
-}
-
-bool flagReceive() {
+bool flagReceive(char varAr[], int valAr[]) {
   static boolean recvInProgress = false;
   static byte ndx = 0;
-
   char endMarker = '>';
   char rc;
-
-
   int nVal;
-
   const byte numChars = 32;
   char writeChar[numChars];
   bool newData = 0;
   int selectedVar = 0;
 
-
-
   while (Serial.available() > 0 && newData == 0) {
-
-
     rc = Serial.read();
-
-
     if (recvInProgress == false) {
       for ( int i = 0; i < 12; i++) {
-        if (rc == knownHeaders[i]) {
+        if (rc == varAr[i]) {
           selectedVar = i;
           recvInProgress = true;
           Serial.println(selectedVar);
         }
       }
     }
-
 
     else if (recvInProgress == true) {
       if (rc != endMarker) {
@@ -655,40 +593,48 @@ bool flagReceive() {
         newData = 1;
 
         nVal = int(String(writeChar).toInt());
-        knownValues[selectedVar] = nVal;
-        knownReset[selectedVar] = 1;
+        valAr[selectedVar] = nVal;
 
       }
     }
   }
-  return newData;
-
-
+  return newData; // tells us if a valid variable arrived.
 }
 
 
 void assignVars() {
 
   pyState = knownValues[0];
+
   pulseTimeA = knownValues[1];
   delayTimeA = knownValues[2];
   stimAmp_chanA = knownValues[3];
   nPulseA = knownValues[4];
   baselineA = knownValues[5];
+
   pulseTimeB = knownValues[6];
   delayTimeB = knownValues[7];
   stimAmp_chanB = knownValues[8];
   nPulseB = knownValues[9];
   baselineB = knownValues[10];
+
   trainDur = knownValues[11];
 
 }
 
 void resetVars() {
   for ( int i = 0; i < 12; i++) {
-    knownReset[i] = 0;
     knownValues[i] = -1;
   }
+}
+
+void analogReads() {
+  readValA = analogRead(dacReadA);
+  readValB = analogRead(dacReadB);
+  readValC = analogRead(dacReadC);
+  readValD = analogRead(dacReadD);
+  readValE = analogRead(dacReadE);
+  readValF = analogRead(dacReadF);
 }
 
 int ramp(int voltage, int slope, int peakAmp) {
@@ -701,13 +647,4 @@ int ramp(int voltage, int slope, int peakAmp) {
     voltage = 0;
   }
   return voltage;
-}
-
-void analogReads(){
-    readValA = analogRead(dacReadA);
-    readValB = analogRead(dacReadB);
-    readValC = analogRead(dacReadC);
-    readValD = analogRead(dacReadD);
-    readValE = analogRead(dacReadE);
-    readValF = analogRead(dacReadF);
 }

@@ -43,9 +43,9 @@ class psVariables:
 		# 2) If it does not exist make it
 		if a==0:
 			sesVarD = {'currentSession':0,'dirPath':"/",\
-			'animalID':"an1",'totalTrials':5,'uiUpdateSamps':250,'sRate':2000,\
+			'animalID':"an1",'totalTrials':5,'uiUpdateSamps':250,'sRate':1000,\
 			'sampsToPlot':5000,'comPath':"/dev/cu.usbmodem3165411",'fps':30,\
-			'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':13,\
+			'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':12,\
 			'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':12,\
 			'tNum':1,'tDur':4,'timeToPlot':1}
 
