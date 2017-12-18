@@ -1,4 +1,4 @@
-# pyStim v1.0
+# pyStim v1.1
 # _________________
 # Works with microcontrollers that have hardward DACs, like the Teensy 3 line.
 # It is intended to be used with a Teensy3.5/3.6, both of which have 2 analog outs.
@@ -44,7 +44,7 @@ class psVariables:
 		if a==0:
 			sesVarD = {'currentSession':0,'dirPath':"/",\
 			'animalID':"an1",'totalTrials':5,'uiUpdateSamps':250,'sRate':1000,\
-			'sampsToPlot':5000,'comPath':"/dev/cu.usbmodem3165411",'fps':30,\
+			'sampsToPlot':5000,'comPath':"/dev/cu.usbmodem3165411",'fps':15,\
 			'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':12,\
 			'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':12,\
 			'tNum':1,'tDur':4,'timeToPlot':1}
@@ -207,7 +207,7 @@ class psPlot:
 		self.positionAxes=plt.subplot2grid([2,2],(0,0),colspan=2,rowspan=1)
 		self.positionAxes.set_yticks([])
 		self.positionAxes.set_xticks([])
-		self.positionAxes.set_ylim([-100,2**13+1000])
+		self.positionAxes.set_ylim([-100,2**12+1000])
 		self.positionAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
 		self.positionAxes.set_title('current trial',fontsize=10)
 		self.positionLine,=self.positionAxes.plot([1,1],color="olive",lw=1)
@@ -216,7 +216,7 @@ class psPlot:
 
 		self.lastTrialAxes=plt.subplot2grid([2,2],(1,0),colspan=2,rowspan=1)
 		self.lastTrialAxes.set_yticks([])
-		self.lastTrialAxes.set_ylim([-500,2**13+1000])
+		self.lastTrialAxes.set_ylim([-500,2**12+1000])
 		self.lastTrialAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
 		self.lastTrialAxes.set_title('last trial',fontsize=10)
 		self.lastDataLine,=self.lastTrialAxes.plot([1,1],color="olive",lw=1)
@@ -228,13 +228,15 @@ class psPlot:
 		splt=int(self.sesVarD['sampsToPlot'])
 		posPltYData=np.array(psData.rv1[-int(splt):])
 		posPltYData2=np.array(psData.rv2[-int(splt):])
+		self.lastTrialAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
+		self.positionAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
 		x0=np.array(psData.tm[-int(splt):])
 
 		tNum=(int(self.sesVarD['tNum'])+1)-(self.lastTrial)
 		self.trialFig.suptitle('trial # {} of {}'.format(tNum,\
 			int(self.sesVarD['totalTrials'])),fontsize=10)
 		
-		if len(x0)>1:
+		if len(x0)>1 and self.dumpPlot==0:
 			self.positionLine.set_xdata(x0)
 			self.positionLine.set_ydata(posPltYData)
 			self.positionLine2.set_xdata(x0)
@@ -252,6 +254,8 @@ class psPlot:
 		dT=np.divide(1,int(self.sesVarD['sRate']))
 		posPltYData=np.array(psData.v1)
 		posPltYData2=np.array(psData.v2)
+		self.lastTrialAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
+		self.positionAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
 
 		x0=np.array(psData.tm)    
 
@@ -743,13 +747,14 @@ class pyStim:
 					tC=1
 			
 			# psUtil.refreshDictFromGui(self,"sesVarD")
-			psUtil.refreshDictFromGui(self,"ptVarD_chan0")
-			psUtil.refreshDictFromGui(self,"ptVarD_chan1")
+			# psUtil.refreshDictFromGui(self,"ptVarD_chan0")
+			# psUtil.refreshDictFromGui(self,"ptVarD_chan1")
 
 			self.initPulseTrain()
 			self.pulseTrainTrial()
 			pyStim.saveTrialData(self)
 			pyStim.updateSessionData(self)
+			self.sesVarD['tDur']=int(self.tDur_tv.get())
 			self.sesVarD['tNum']=int(self.sesVarD['tNum'])+1
 			self.sesVarD['totalTrials']=int(self.totalTrials_tv.get())
 			self.sesVarD['uiUpdateSamps']=int(self.uiUpdateSamps_tv.get())
@@ -899,15 +904,17 @@ class pyStim:
 					stBCol=stCol+(spillCount+2)
 			
 			exec('self.{}_tv=StringVar(self.{})'.format(headerString + "_" + key,frameName))
-			exec('self.{}_label = Label(self.{}, text="{}")'.format(headerString + "_" + key,frameName,key))
-			exec('self.{}_entries=Entry(self.{},width=5,textvariable=self.{}_tv)'.format(headerString + "_" + key,frameName, headerString + "_"  + key))
+			exec('self.{}_label = Label(self.{}, text="{}")'.\
+				format(headerString + "_" + key,frameName,key))
+			exec('self.{}_entries=Entry(self.{},width=5,textvariable=self.{}_tv)'.\
+				format(headerString + "_" + key,frameName, headerString + "_"  + key))
 			exec('self.{}_label.grid(row={},column=stBCol)'.format(headerString + "_" + key,rowC))
 			exec('self.{}_entries.grid(row={},column=stCol)'.format(headerString + "_" + key,rowC))
 			exec('self.{}_tv.set({})'.format(headerString + "_"  + key,dictName[key]))
 			rowC=rowC+1
 
 	def pulseTrainTrial(self):
-
+		self.dumpPlot=0
 		waitSamps=30*int(self.sesVarD['sRate'])
 		while self.inTrial ==1:
 			# handshake with teensy. we start in -1, but want to go to 0
@@ -922,8 +929,6 @@ class pyStim:
 
 				elif self.txBit==1:
 					waitCount=waitCount+1
-					# # wait a bit (minimium of dt)
-					# time.sleep(0.002)
 					
 					self.tR,self.rxBit=self.readSerialData(self.teensy,'vars',self.varCount)
 					
@@ -1061,6 +1066,7 @@ class pyStim:
 						n=n+1
 						if n % int(self.sesVarD['uiUpdateSamps']) == 0:
 							pyStim.updatePlotCheck(self)
+							self.dumpPlot=1
 						dR,dU=self.readSerialData(self.teensy,'data',self.dataCount)
 						if dU:
 							for x in range(0,len(psData.trialStores)):

@@ -2,39 +2,35 @@
    Notes: Teensey 3.5/3.6 has two built in 12 bit dacs.
    I assume you have a 3.5 or 3.6 and have 2 outs. But you can easily go to 1.
    I use the builtin FlexiTimer2 to handle the interupts for timing.
-   v1.01
+   v1.1 - more arrays; fewer problems
    11/27/2017
    cdeister@brown.edu
    # Anything that is licenseable is governed by an MIT License in the github directory.
 */
 
 #include <FlexiTimer2.h>
-#include <SPI.h>
 
+// Hardware Params
 int adcResolution = 12; // in bits; res of ADCs
 int dacResolution = 12; // in bits; res of DACs
 
 // session params
-int sampsPerSecond = 1000; // samples per second (works well up to 5K, 10-20K with effort)
+int sampsPerSecond = 1000; // samples per second
 float evalEverySample = 1.0; // number of times to poll the stim funtion
 int trigTime = 0.01 * sampsPerSecond;
 
-// initialize counters & state vars.
-
-float stateCounterA = 0;
-float stateCounterB = 0;
-int pulseCounterA = 0;
-int pulseCounterB = 0;
-
-// init time refs.
+// Initialize counter and mc time.
 float tTime = 0;
 float initArTime;
 
+// jank variables
 int pulsing = 0;
 
 // train vals that we look for (set elsewhere; python)
 char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'};
 int knownValues[] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+
+
 
 // init vars
 int pyState = knownValues[0];
@@ -43,55 +39,37 @@ int delayTimeA = knownValues[2];
 int stimAmp_chanA = knownValues[3];
 int nPulseA = knownValues[4];
 int baselineA = knownValues[5];
+
 int pulseTimeB = knownValues[6];
 int delayTimeB = knownValues[7];
 int stimAmp_chanB = knownValues[8];
 int nPulseB = knownValues[9];
+
 int baselineB = knownValues[10];
 int trainDur = knownValues[11];
 
-int tSlopeA = 500;
-int tSlopeB = 500;
-
 // analog outputs
-const int dacPinA = A21;
-const int dacPinB = A22;
+int dacChans[] = {A21, A22};
+int writeValues[] = {0, 0};
+int chanAStates[] = {0, 0, 0, 0};
+int chanBStates[] = {0, 0, 0, 0};
 
 // analog inputs
-const int dacReadA = A9;
-const int dacReadB = A8;
-const int dacReadC = A5;
-const int dacReadD = A4;
-const int dacReadE = A3;
-const int dacReadF = A2;
+int adcChans[] = {A9, A8, A5, A4, A3, A2};
+int readValues[] = {0, 0, 0, 0, 0, 0};
 
-// trigger outs
+
+// digital outs
 const int scopeTrigger = 6;
+int counterChans[]={13,25};  //13 is 24
+int counterValues[] = {0, 0};
+int counterAStates[] = {0, 0, 0, 0};
+int counterBStates[] = {0, 0, 0, 0};
 
-// general variables
-int trigAVal;
-int readValA;
-int readValB;
-int readValC;
-int readValD;
-int readValE;
-int readValF;
-int writeValA;
-int writeValB;
 
-// boolean toggles
-bool feedbackVal = 0;
-bool feedbackValB = 0;
-bool inPulseA = 0;
-bool inPulseB = 0;
-bool baselineAComp = 0;
-bool baselineBComp = 0;
 bool scopeTriggered = 0;
 bool flushState = 0;
 
-// feedback LEDs
-const int pulseA_LED = 13;
-const int pulseB_LED = 14;
 
 void setup() {
 
@@ -101,8 +79,12 @@ void setup() {
   analogWriteResolution(dacResolution);
   analogReadResolution(adcResolution);
 
-  pinMode(pulseA_LED, OUTPUT);
-  pinMode(pulseB_LED, OUTPUT);
+  
+  for ( int i = 0; i < sizeof(counterChans); i++) {
+    pinMode(counterChans[i], OUTPUT);
+  }
+  
+
   pinMode(scopeTrigger, OUTPUT);
   FlexiTimer2::set(1, evalEverySample / sampsPerSecond, fStim); // call ever
   FlexiTimer2::start();
@@ -135,27 +117,37 @@ void fStim() {
     }
     resetVars();
     tTime = 0;
-
-    stateCounterA = 0;
-    stateCounterB = 0;
-
-    pulseCounterA = 0;
-    pulseCounterB = 0;
-
-
     flushState = 0;
-
     assignVars();
-    feedbackVal = 0;
-    feedbackValB = 1;
-    inPulseA = 0;
-    inPulseB = 0;
-    baselineAComp = 0;
-    baselineBComp = 0;
-    scopeTriggered = 0;
-    writeValA = 0;
-    writeValB = 0;
+    pulsing = 0; // super jank
 
+  
+    scopeTriggered = 0;
+
+    writeValues[0] = 0;
+    writeValues[1] = 0;
+
+    chanAStates[0] = 0;
+    chanAStates[1] = 0;
+    chanAStates[2] = 0;
+    chanAStates[3] = 0;
+
+
+    chanBStates[0] = 0;
+    chanBStates[1] = 0;
+    chanBStates[2] = 0;
+    chanBStates[3] = 0;
+
+    counterAStates[0]=0;
+    counterAStates[1]=0;
+    counterAStates[2]=0;
+    counterAStates[3]=0;
+    
+    counterBStates[0]=0;
+    counterBStates[1]=0;
+    counterBStates[2]=0;
+    counterBStates[3]=0;
+    
   }
 
 
@@ -165,7 +157,6 @@ void fStim() {
   // **********************************
   else if (pyState == 1) {
     initArTime = millis();
-
   }
 
   else if (pyState == 2) {
@@ -191,303 +182,29 @@ void fStim() {
       // END -  trigger stuff
       // **************************
 
-      // ******************************
-      // b) ----  channel 1 pulse tain
-      // ******************************
-      // baseline a
-      if (tTime <= baselineA) {
-        inPulseA = 0;
-        stateCounterA = 0;
-      }
 
-      else if (tTime > baselineA && baselineAComp == 0) {
-        inPulseA = 1;
-        stateCounterA = 0;
-        baselineAComp = 1;
-      }
+      writeValues[0] = pulseTrain(tTime, chanAStates, baselineA, nPulseA, 
+        delayTimeA, pulseTimeA, stimAmp_chanA);
+      writeValues[1] = pulseTrain(tTime, chanBStates, baselineB, nPulseB, 
+        delayTimeB, pulseTimeB, stimAmp_chanB);
+      counterValues[0] = pulseTrain(tTime, counterAStates, 0, -1, 10, 2, 1);
+      counterValues[1]=0;
 
-      // channel a IPI
-      if (inPulseA == 0) {
-        stateCounterA = stateCounterA + 1;
-        if (stateCounterA <= delayTimeA) {
-          feedbackVal = 0;
-          writeValA = 0;
-        }
-
-        // exit A
-        else if (stateCounterA > delayTimeA) {
-          stateCounterA = 0;
-          pulseCounterA = pulseCounterA + 1;
-          if (pulseCounterA < nPulseA) {
-            inPulseA = 1;
-          }
-          else if (pulseCounterA >= nPulseA) {
-            inPulseA = 0;
-          }
-        }
-      }
-
-      // pulse state A
-      if (inPulseA == 1) {
-        stateCounterA = stateCounterA + 1;
-        if (stateCounterA < pulseTimeA) {
-          feedbackVal = 1;
-          writeValA = stimAmp_chanA;
-        }
-
-        // exit A
-        else if (stateCounterA >= pulseTimeA) {
-          stateCounterA = 0;
-          inPulseA = 0;
-        }
-      }
-      // ******************************
-      // END -  channel 1 pulse tain
-      // ******************************
-
-      // ******************************
-      // c) ----  channel 2 pulse tain
-      // ******************************
-      // baseline b
-      if (tTime <= baselineB) {
-        inPulseB = 0;
-        stateCounterB = 0;
-      }
-
-      else if (tTime > baselineB && baselineBComp == 0) {
-
-        inPulseB = 1;
-        stateCounterB = 0;
-        baselineBComp = 1;
-      }
-
-      // channel B IPI
-      if (inPulseB == 0) {
-        stateCounterB = stateCounterB + 1;
-        if (stateCounterB <= delayTimeB) {
-          feedbackValB = 0;
-          writeValB = 0;
-        }
-
-        // exit A
-        else if (stateCounterB > delayTimeB) {
-          stateCounterB = 0;
-          pulseCounterB = pulseCounterB + 1;
-          if (pulseCounterB < nPulseB) {
-            inPulseB = 1;
-          }
-          else if (pulseCounterB >= nPulseB) {
-            inPulseB = 0;
-          }
-        }
-      }
-
-      // pulse state B
-      if (inPulseB == 1) {
-
-        stateCounterB = stateCounterB + 1;
-        if (stateCounterB < pulseTimeB) {
-          feedbackValB = 1;
-          writeValB = stimAmp_chanB;
-
-        }
-
-        // exit B
-        else if (stateCounterB >= pulseTimeB) {
-          stateCounterB = 0;
-          inPulseB = 0;
-        }
-      }
-      // ******************************
-      // END -  channel 2 pulse tain
-      // ******************************
-
-      // *************************************
-      // d) ----  write out and update python
-      // **************************************
-
-      analogWrite(dacPinA, writeValA);
-      analogWrite(dacPinB, writeValB);
+      analogWrites();
+      digitalWrites();
       analogReads();
-      digitalWrite(pulseA_LED, feedbackVal);
-      digitalWrite(pulseB_LED, feedbackValB);
+      
       spitData();
     }
 
     else if (tTime > trainDur) {
       pulsing = 0;
-      //spitData();
-
-      analogWrite(dacPinA, 0);
-      analogWrite(dacPinB, 0);
-
+      analogWrites();
       analogReads();
 
-      digitalWrite(pulseA_LED, 0);
-      digitalWrite(pulseB_LED, 0);
     }
   }
 
-  // ramp
-  else if (pyState == 3) {
-
-    // always increment time and see if we are out of it
-    tTime = tTime + 1;
-    if (tTime <= trainDur) {
-      pulsing = 1;
-
-      // **************************
-      // a) ----  trigger stuff
-      // **************************
-
-      if (tTime <= trigTime) {
-        digitalWrite(scopeTrigger, 1);
-      }
-
-      else if (tTime > trigTime) {
-        digitalWrite(scopeTrigger, 0);
-      }
-
-      // **************************
-      // END -  trigger stuff
-      // **************************
-
-      // ******************************
-      // b) ----  channel 1 pulse tain
-      // ******************************
-      // baseline a
-      if (tTime <= baselineA) {
-        inPulseA = 0;
-        stateCounterA = 0;
-      }
-
-      else if (tTime > baselineA && baselineAComp == 0) {
-        inPulseA = 1;
-        stateCounterA = 0;
-        baselineAComp = 1;
-      }
-
-      // channel a IPI
-      if (inPulseA == 0) {
-        stateCounterA = stateCounterA + 1;
-        if (stateCounterA <= delayTimeA) {
-          feedbackVal = 0;
-          writeValA = 0;
-        }
-
-        // exit A
-        else if (stateCounterA > delayTimeA) {
-          stateCounterA = 0;
-          pulseCounterA = pulseCounterA + 1;
-          if (pulseCounterA < nPulseA) {
-            inPulseA = 1;
-            writeValA = 0; // reset to 0 for ramp.
-          }
-          else if (pulseCounterA >= nPulseA) {
-            inPulseA = 0;
-          }
-        }
-      }
-
-      // ramp state A
-      if (inPulseA == 1) {
-        stateCounterA = stateCounterA + 1;
-        if (stateCounterA <= pulseTimeA) {
-          feedbackVal = 1;
-          writeValA = ramp(writeValA, tSlopeA, stimAmp_chanA);
-          writeValA = stimAmp_chanA;
-        }
-
-        // exit A
-        else if (stateCounterA > pulseTimeA) {
-          stateCounterA = 0;
-          inPulseA = 0;
-        }
-      }
-      // ******************************
-      // END -  channel 1 pulse tain
-      // ******************************
-
-      // ******************************
-      // c) ----  channel 2 pulse tain
-      // ******************************
-      // baseline b
-      if (tTime <= baselineB) {
-        inPulseB = 0;
-        stateCounterB = 0;
-      }
-
-      else if (tTime > baselineB && baselineBComp == 0) {
-
-        inPulseB = 1;
-        stateCounterB = 0;
-        baselineBComp = 1;
-      }
-
-      // channel B IPI
-      if (inPulseB == 0) {
-        stateCounterB = stateCounterB + 1;
-        if (stateCounterB <= delayTimeB) {
-          feedbackValB = 0;
-          writeValB = 0;
-        }
-
-        // exit A
-        else if (stateCounterB > delayTimeB) {
-          stateCounterB = 0;
-          pulseCounterB = pulseCounterB + 1;
-          if (pulseCounterB < nPulseB) {
-            inPulseB = 1;
-            writeValB = 0;
-          }
-          else if (pulseCounterB >= nPulseB) {
-            inPulseB = 0;
-          }
-        }
-      }
-
-      // pulse state B
-      if (inPulseB == 1) {
-
-        stateCounterB = stateCounterB + 1;
-        if (stateCounterB <= pulseTimeB) {
-          feedbackValB = 1;
-          writeValB = ramp(writeValB, tSlopeB, stimAmp_chanB);
-
-        }
-
-        // exit A
-        else if (stateCounterB > pulseTimeB) {
-          stateCounterB = 0;
-          inPulseB = 0;
-        }
-      }
-      // ******************************
-      // END -  channel 2 pulse tain
-      // ******************************
-
-      // *************************************
-      // d) ----  write out and update python
-      // **************************************
-
-      analogWrite(dacPinA, writeValA);
-      analogWrite(dacPinB, writeValB);
-      analogReads();
-      digitalWrite(pulseA_LED, feedbackVal);
-      digitalWrite(pulseB_LED, feedbackValB);
-      spitData();
-    }
-
-    else if (tTime > trainDur) {
-      pulsing = 0;
-      //      spitData();
-      analogWrite(dacPinA, 0);
-      analogWrite(dacPinB, 0);
-      analogReads();
-      digitalWrite(pulseA_LED, 0);
-      digitalWrite(pulseB_LED, 0);
-    }
-  }
 }
 
 void loop()
@@ -532,25 +249,25 @@ void spitData() {
   Serial.print(',');
   Serial.print(tTime);
   Serial.print(',');
-  Serial.print(writeValA);
+  Serial.print(writeValues[0]);
   Serial.print(',');
-  Serial.print(writeValB);
+  Serial.print(writeValues[1]);
   Serial.print(',');
-  Serial.print(readValA);
+  Serial.print(readValues[0]);
   Serial.print(',');
-  Serial.print(readValB);
+  Serial.print(readValues[1]);
   Serial.print(',');
-  Serial.print(readValC);
+  Serial.print(readValues[2]);
   Serial.print(',');
-  Serial.print(readValD);
+  Serial.print(readValues[3]);
   Serial.print(',');
-  Serial.print(readValE);
+  Serial.print(readValues[4]);
   Serial.print(',');
-  Serial.print(readValF);
+  Serial.print(counterValues[0]);
   Serial.print(',');
   Serial.print(millis() - initArTime);
   Serial.print(',');
-  Serial.println(pulsing);
+  Serial.println(pulsing); // debug jank
 
 }
 
@@ -629,22 +346,96 @@ void resetVars() {
 }
 
 void analogReads() {
-  readValA = analogRead(dacReadA);
-  readValB = analogRead(dacReadB);
-  readValC = analogRead(dacReadC);
-  readValD = analogRead(dacReadD);
-  readValE = analogRead(dacReadE);
-  readValF = analogRead(dacReadF);
+  for ( int i = 0; i < 6; i++) {
+    readValues[i] = analogRead(adcChans[i]);
+  }
 }
 
-int ramp(int voltage, int slope, int peakAmp) {
+void analogWrites() {
+  for ( int i = 0; i < 2; i++) {
+    analogWrite(dacChans[i], writeValues[i]);
+  }
+}
 
-  if (voltage <= peakAmp) {
-    voltage += slope;
+void digitalWrites() {
+  for ( int i = 0; i < 2; i++) {
+    digitalWrite(counterChans[i], counterValues[i]);
+  }
+}
+
+
+
+
+// %%%%%%%%%% Pulse Train Function
+int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse, 
+  int delayTime, int pulseTime, int stimAmp) {
+  bool infPulse=0;
+  if (nPulse<0){
+    infPulse=1;
+  }
+  
+  int writeVal = 0;
+
+  // Chan State Map: baselineComp,inPulse,stateCounter,pulseCounter
+
+  // ***** baseline state
+  if (chanStates[0] == 0) {
+    if (cTime <= blDur) {
+      chanStates[1] = 0; // in pulse?
+      chanStates[2] = 0; // state counter
+    }
+
+    else if (cTime > blDur) {
+      chanStates[0] = 1; // baseline done
+      chanStates[1] = 1; // in pulse
+      chanStates[2] = 0; // but for 0th time.
+      writeVal = stimAmp; // write the first value
+    }
+  }
+  // ***** END baseline state
+
+  // ***** Pulse State
+  else if (chanStates[1] == 1) {
+
+    if (chanStates[2] < pulseTime) {
+      // starts at 0 and climbs to sample before pulseTime
+      writeVal = stimAmp;
+    }
+
+    // exit condition
+    else if (chanStates[2] >= pulseTime) {
+      chanStates[1] = 0; // now in dwell state
+      chanStates[2] = 0; // for the 0th time
+      writeVal = 0;
+    }
+  }
+  // ***** END Pulse State
+
+
+  // ***** Dwell State
+  else if (chanStates[1] == 0) {
+    if (chanStates[2] < delayTime) {
+      // starts at 0 and climbs to sample before delayTime
+      writeVal = 0;
+    }
+
+    // exit condition
+    else if (chanStates[2] >= delayTime) {
+      chanStates[3] = chanStates[3] + 1; // increment the pulse counter
+      
+      if (chanStates[3] < nPulse || infPulse==1) {
+        chanStates[1] = 1; // now in pulse state
+        chanStates[2] = 0; // for the 0th time
+        writeVal = stimAmp;
+      }
+  
+      else if (chanStates[3] >= nPulse) {
+        chanStates[1] = 0; // stay in the dwell state
+      }
+    }
   }
 
-  else if (voltage > peakAmp) {
-    voltage = 0;
-  }
-  return voltage;
+  // Always increment state and write
+  chanStates[2] = chanStates[2] + 1;
+  return writeVal;
 }
