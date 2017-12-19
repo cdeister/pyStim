@@ -27,8 +27,8 @@ float initArTime;
 int pulsing = 0;
 
 // train vals that we look for (set elsewhere; python)
-char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'};
-int knownValues[] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n'};
+int knownValues[] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
 
 
@@ -48,6 +48,8 @@ int nPulseB = knownValues[9];
 int baselineB = knownValues[10];
 int trainDur = knownValues[11];
 
+
+
 // analog outputs
 int dacChans[] = {A21, A22};
 int writeValues[] = {0, 0};
@@ -61,10 +63,12 @@ int readValues[] = {0, 0, 0, 0, 0, 0};
 
 // digital outs
 const int scopeTrigger = 6;
-int counterChans[]={13,25};  //13 is 24
+int counterChans[] = {25, 13}; //13 is 24
 int counterValues[] = {0, 0};
+int counterInts[] = {-1,-1}; // in samples
 int counterAStates[] = {0, 0, 0, 0};
 int counterBStates[] = {0, 0, 0, 0};
+
 
 
 bool scopeTriggered = 0;
@@ -79,11 +83,11 @@ void setup() {
   analogWriteResolution(dacResolution);
   analogReadResolution(adcResolution);
 
-  
-  for ( int i = 0; i < sizeof(counterChans); i++) {
+
+  for ( int i = 0; i < 2; i++) {
     pinMode(counterChans[i], OUTPUT);
   }
-  
+
 
   pinMode(scopeTrigger, OUTPUT);
   FlexiTimer2::set(1, evalEverySample / sampsPerSecond, fStim); // call ever
@@ -121,9 +125,9 @@ void fStim() {
     assignVars();
     pulsing = 0; // super jank
 
-  
+    
     scopeTriggered = 0;
-
+    
     writeValues[0] = 0;
     writeValues[1] = 0;
 
@@ -138,16 +142,18 @@ void fStim() {
     chanBStates[2] = 0;
     chanBStates[3] = 0;
 
-    counterAStates[0]=0;
-    counterAStates[1]=0;
-    counterAStates[2]=0;
-    counterAStates[3]=0;
-    
-    counterBStates[0]=0;
-    counterBStates[1]=0;
-    counterBStates[2]=0;
-    counterBStates[3]=0;
-    
+    counterAStates[0] = 0;
+    counterAStates[1] = 0;
+    counterAStates[2] = 0;
+    counterAStates[3] = 0;
+
+    counterBStates[0] = 0;
+    counterBStates[1] = 0;
+    counterBStates[2] = 0;
+    counterBStates[3] = 0;
+    counterValues[0] = 0;
+    counterValues[1] = 0;
+
   }
 
 
@@ -183,17 +189,17 @@ void fStim() {
       // **************************
 
 
-      writeValues[0] = pulseTrain(tTime, chanAStates, baselineA, nPulseA, 
-        delayTimeA, pulseTimeA, stimAmp_chanA);
-      writeValues[1] = pulseTrain(tTime, chanBStates, baselineB, nPulseB, 
-        delayTimeB, pulseTimeB, stimAmp_chanB);
-      counterValues[0] = pulseTrain(tTime, counterAStates, 0, -1, 10, 2, 1);
-      counterValues[1]=0;
+      writeValues[0] = pulseTrain(tTime, chanAStates, baselineA, nPulseA,
+                                  delayTimeA, pulseTimeA, stimAmp_chanA);
+      writeValues[1] = pulseTrain(tTime, chanBStates, baselineB, nPulseB,
+                                  delayTimeB, pulseTimeB, stimAmp_chanB);
+      counterValues[0] = pulseTrain(tTime, counterAStates, 0, -1, counterInts[0], 2, 1);
+      counterValues[1] = pulseTrain(tTime, counterBStates, 0, -1, counterInts[1], 2, 1);
 
       analogWrites();
       digitalWrites();
       analogReads();
-      
+
       spitData();
     }
 
@@ -238,7 +244,11 @@ void spitVars() {
   Serial.print(',');
   Serial.print(baselineB);
   Serial.print(',');
-  Serial.println(trainDur);
+  Serial.print(trainDur);
+  Serial.print(',');
+  Serial.print(counterInts[0]);
+  Serial.print(',');
+  Serial.println(counterInts[1]);
 
 }
 
@@ -285,7 +295,7 @@ bool flagReceive(char varAr[], int valAr[]) {
   while (Serial.available() > 0 && newData == 0) {
     rc = Serial.read();
     if (recvInProgress == false) {
-      for ( int i = 0; i < 12; i++) {
+      for ( int i = 0; i < 14; i++) {
         if (rc == varAr[i]) {
           selectedVar = i;
           recvInProgress = true;
@@ -336,11 +346,13 @@ void assignVars() {
   baselineB = knownValues[10];
 
   trainDur = knownValues[11];
+  counterInts[0]=knownValues[12];
+  counterInts[1]=knownValues[13];
 
 }
 
 void resetVars() {
-  for ( int i = 0; i < 12; i++) {
+  for ( int i = 0; i < 14; i++) {
     knownValues[i] = -1;
   }
 }
@@ -367,13 +379,13 @@ void digitalWrites() {
 
 
 // %%%%%%%%%% Pulse Train Function
-int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse, 
-  int delayTime, int pulseTime, int stimAmp) {
-  bool infPulse=0;
-  if (nPulse<0){
-    infPulse=1;
+int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
+               int delayTime, int pulseTime, int stimAmp) {
+  bool infPulse = 0;
+  if (nPulse < 0) {
+    infPulse = 1;
   }
-  
+
   int writeVal = 0;
 
   // Chan State Map: baselineComp,inPulse,stateCounter,pulseCounter
@@ -422,13 +434,13 @@ int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
     // exit condition
     else if (chanStates[2] >= delayTime) {
       chanStates[3] = chanStates[3] + 1; // increment the pulse counter
-      
-      if (chanStates[3] < nPulse || infPulse==1) {
+
+      if (chanStates[3] < nPulse || infPulse == 1) {
         chanStates[1] = 1; // now in pulse state
         chanStates[2] = 0; // for the 0th time
         writeVal = stimAmp;
       }
-  
+
       else if (chanStates[3] >= nPulse) {
         chanStates[1] = 0; // stay in the dwell state
       }

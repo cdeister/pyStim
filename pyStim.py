@@ -47,8 +47,8 @@ class psVariables:
 			'animalID':"an1",'totalTrials':5,'uiUpdateSamps':250,'sRate':1000,\
 			'sampsToPlot':5000,'comPath':"/dev/cu.usbmodem3165411",'fps':15,\
 			'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':12,\
-			'dacBitDepth':12,'varCount':13,'sNum':1,'dataCount':12,\
-			'tNum':1,'tDur':4,'timeToPlot':1}
+			'dacBitDepth':12,'varCount':15,'sNum':1,'dataCount':12,\
+			'tNum':1,'tDur':4,'timeToPlot':1,'cntrFreqA':1000,'cntrFreqB':1000}
 
 		elif a==1:
 
@@ -56,10 +56,8 @@ class psVariables:
 
 
 		exec('self.{}=sesVarD'.format(idString))
-		# self.sesVarD['sRate']
 
 		psUtil.refreshGuiFromDict(self,sesVarD)
-
 		psVariables.dictToPandas(self,sesVarD,idString)
 
 	def setPulseTrainVars(self,idString):
@@ -166,10 +164,10 @@ class psData:
 
 	def initTeensyStateData(self):
 
-		psData.varHeader='','a','b','c','d','e','f','g','h','i','j','k','l'	
+		psData.varHeader='','a','b','c','d','e','f','g','h','i','j','k','l','m','n'	
 		psData.varNames='head','state','pDurA','iPIntA','pAmpA','nPulsesA','bDurA',\
-		'pDurB','iPIntB','pAmpB','nPulsesB','bDurB','tDur'
-		psData.varNums=[0,1,2,3,4,5,6,7,8,9,10,11,12]
+		'pDurB','iPIntB','pAmpB','nPulsesB','bDurB','tDur','cntrFreqA','cntrFreqB'
+		psData.varNums=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14]
 
 	def saveTrialData(self):
 
@@ -390,7 +388,7 @@ class psWindow:
 		pStart=0
 		serStart=pStart+3
 		sesStart=serStart+8
-		plotStart=sesStart+9
+		plotStart=sesStart+11
 		mainStart=plotStart+6
 
 		psWindow.addSerialBlock(self,serStart)
@@ -475,6 +473,22 @@ class psWindow:
 		self.tDur_entry=Entry(self.master,textvariable=\
 			self.tDur_tv,width=10).\
 		grid(row=startRow+7,column=0,sticky=E)
+
+		self.cntrFreqA_label = Label(self.master,text=" cntrFreqA:")\
+		.grid(row=startRow+8,column=0,sticky=W)
+		self.cntrFreqA_tv=StringVar(self.master)
+		self.cntrFreqA_tv.set('0')
+		self.cntrFreqA_entry=Entry(self.master,textvariable=\
+			self.cntrFreqA_tv,width=10).\
+		grid(row=startRow+8,column=0,sticky=E)
+
+		self.cntrFreqB_label = Label(self.master,text=" cntrFreqB:")\
+		.grid(row=startRow+9,column=0,sticky=W)
+		self.cntrFreqB_tv=StringVar(self.master)
+		self.cntrFreqB_tv.set('0')
+		self.cntrFreqB_entry=Entry(self.master,textvariable=\
+			self.cntrFreqB_tv,width=10).\
+		grid(row=startRow+9,column=0,sticky=E)
 
 		
 
@@ -756,6 +770,8 @@ class pyStim:
 			pyStim.saveTrialData(self)
 			pyStim.updateSessionData(self)
 			self.sesVarD['tDur']=int(self.tDur_tv.get())
+			self.sesVarD['cntrFreqA']=int(self.cntrFreqA_tv.get())
+			self.sesVarD['cntrFreqB']=int(self.cntrFreqB_tv.get())
 			self.sesVarD['tNum']=int(self.sesVarD['tNum'])+1
 			self.sesVarD['totalTrials']=int(self.totalTrials_tv.get())
 			self.sesVarD['uiUpdateSamps']=int(self.uiUpdateSamps_tv.get())
@@ -773,6 +789,7 @@ class pyStim:
 
 		sR=comObj.readline().strip().decode()
 		sR=sR.split(',')
+
 		if len(sR)==headerCount and sR[0]==headerString:
 			newData=1
 		else:
@@ -954,6 +971,7 @@ class pyStim:
 				if initSt==0:					
 					n=1
 					tDur=int(self.sesVarD['tDur']*self.sesVarD['sRate'])
+					
 					pAmpA=(self.ptVarD_chan0['pulseAmpV']/3.3)*4095
 					pDurA=self.ptVarD_chan0['pulseTime']*int(self.sesVarD['sRate'])
 					iPIntA=self.ptVarD_chan0['dwellTime']*int(self.sesVarD['sRate'])
@@ -965,6 +983,9 @@ class pyStim:
 					iPIntB=self.ptVarD_chan1['dwellTime']*int(self.sesVarD['sRate'])
 					nPulsesB=self.ptVarD_chan1['nPulses']
 					bDurB=self.ptVarD_chan1['baselineTime']*int(self.sesVarD['sRate'])
+
+					cntrFreqA=self.sesVarD['cntrFreqA']
+					cntrFreqB=self.sesVarD['cntrFreqB']
 					pST=self.current_milli_time()
 					self.varsSent=0
 					self.resetVariables=1
@@ -1007,6 +1028,7 @@ class pyStim:
 						varCheck=[]
 						
 						for x in range(1,len(self.tR)):
+							
 							curVarTmp=int(self.tR[x])
 							if curVarTmp == -1:
 								varCheck.append(x)
@@ -1017,6 +1039,7 @@ class pyStim:
 							tVal=str(int(eval('{}'.format(psData.varNames[upVar]))))
 							tHead=psData.varHeader[upVar]
 							self.teensy.write('{}{}>'.format(tHead,tVal).encode('utf-8'))
+							
 							self.txBit=1
 							waitCount=0
 							pyStim.updatePlotCheck(self)
