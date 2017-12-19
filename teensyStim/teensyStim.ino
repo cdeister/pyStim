@@ -2,19 +2,19 @@
    Notes: Teensey 3.5/3.6 has two built in 12 bit dacs.
    I assume you have a 3.5 or 3.6 and have 2 outs. But you can easily go to 1.
    I use the builtin FlexiTimer2 to handle the interupts for timing.
-   v1.1 - more arrays; fewer problems
-   11/27/2017
+   v1.15 - tweaks
+   q2/X/2017
    cdeister@brown.edu
    # Anything that is licenseable is governed by an MIT License in the github directory.
 */
 
 #include <FlexiTimer2.h>
 
-// Hardware Params
-int adcResolution = 12; // in bits; res of ADCs
-int dacResolution = 12; // in bits; res of DACs
+// Set DAC and ADC resolution in bits.
+int adcResolution = 12; 
+int dacResolution = 12;
 
-// session params
+// Interupt Timing Params.
 int sampsPerSecond = 1000; // samples per second
 float evalEverySample = 1.0; // number of times to poll the stim funtion
 int trigTime = 0.01 * sampsPerSecond;
@@ -23,8 +23,9 @@ int trigTime = 0.01 * sampsPerSecond;
 float tTime = 0;
 float initArTime;
 
-// jank variables
-int pulsing = 0;
+
+// General Session State Vals
+bool pulsing = 0;
 
 // train vals that we look for (set elsewhere; python)
 char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n'};
@@ -39,40 +40,41 @@ int delayTimeA = knownValues[2];
 int stimAmp_chanA = knownValues[3];
 int nPulseA = knownValues[4];
 int baselineA = knownValues[5];
-
 int pulseTimeB = knownValues[6];
 int delayTimeB = knownValues[7];
 int stimAmp_chanB = knownValues[8];
 int nPulseB = knownValues[9];
-
 int baselineB = knownValues[10];
 int trainDur = knownValues[11];
 
 
 
 // analog outputs
+int dacCount = 2;
 int dacChans[] = {A21, A22};
 int writeValues[] = {0, 0};
 int chanAStates[] = {0, 0, 0, 0};
 int chanBStates[] = {0, 0, 0, 0};
 
 // analog inputs
+int adcCount = 6;
 int adcChans[] = {A9, A8, A5, A4, A3, A2};
 int readValues[] = {0, 0, 0, 0, 0, 0};
 
+// triggers
+int triggerCount = 6;
+int triggerChans[] = {6};
+char triggerLabels[]={"scope"};
 
-// digital outs
-const int scopeTrigger = 6;
-int counterChans[] = {25, 13}; //13 is 24
+// counter outs
+int counterCount = 2;
+int counterPulseWidth = 2; // in samples
+int counterChans[] = {25, 13};
 int counterValues[] = {0, 0};
-int counterInts[] = {-1,-1}; // in samples
+int counterDelta[] = {-1,-1}; // in samples
 int counterAStates[] = {0, 0, 0, 0};
 int counterBStates[] = {0, 0, 0, 0};
 
-
-
-bool scopeTriggered = 0;
-bool flushState = 0;
 
 
 void setup() {
@@ -82,25 +84,23 @@ void setup() {
 
   analogWriteResolution(dacResolution);
   analogReadResolution(adcResolution);
-
-
-  for ( int i = 0; i < 2; i++) {
+  
+  // set the output counters
+  for ( int i = 0; i < counterCount; i++) {
     pinMode(counterChans[i], OUTPUT);
   }
 
-
-  pinMode(scopeTrigger, OUTPUT);
+  // set the output triggers
+  for ( int i = 0; i < triggerCount; i++) {
+    pinMode(triggerChans[i], OUTPUT);
+  }
+  
   FlexiTimer2::set(1, evalEverySample / sampsPerSecond, fStim); // call ever
   FlexiTimer2::start();
 
 }
 
-// pyStim is interrupt based
-// so fStim is the main "loop"
-// we have to time a function, not run a loop.
-
 void fStim() {
-
 
   // always look for new info from python.
   bool p = flagReceive(knownHeaders, knownValues);
@@ -116,17 +116,20 @@ void fStim() {
   // **********************************
 
   if (pyState == 0) {
+    
     while (Serial.available()) {
       Serial.read();
     }
-    resetVars();
-    tTime = 0;
-    flushState = 0;
-    assignVars();
-    pulsing = 0; // super jank
-
     
-    scopeTriggered = 0;
+    resetVars();
+
+    // reset time and trial state vars.
+    tTime = 0;
+    pulsing = 0; // super jank
+    
+    assignVars();
+    
+    
     
     writeValues[0] = 0;
     writeValues[1] = 0;
@@ -135,7 +138,6 @@ void fStim() {
     chanAStates[1] = 0;
     chanAStates[2] = 0;
     chanAStates[3] = 0;
-
 
     chanBStates[0] = 0;
     chanBStates[1] = 0;
@@ -151,6 +153,7 @@ void fStim() {
     counterBStates[1] = 0;
     counterBStates[2] = 0;
     counterBStates[3] = 0;
+    
     counterValues[0] = 0;
     counterValues[1] = 0;
 
@@ -177,11 +180,11 @@ void fStim() {
       // **************************
 
       if (tTime <= trigTime) {
-        digitalWrite(scopeTrigger, 1);
+        digitalWrite(triggerChans[0], 1);
       }
 
       else if (tTime > trigTime) {
-        digitalWrite(scopeTrigger, 0);
+        digitalWrite(triggerChans[0], 0);
       }
 
       // **************************
@@ -189,12 +192,10 @@ void fStim() {
       // **************************
 
 
-      writeValues[0] = pulseTrain(tTime, chanAStates, baselineA, nPulseA,
-                                  delayTimeA, pulseTimeA, stimAmp_chanA);
-      writeValues[1] = pulseTrain(tTime, chanBStates, baselineB, nPulseB,
-                                  delayTimeB, pulseTimeB, stimAmp_chanB);
-      counterValues[0] = pulseTrain(tTime, counterAStates, 0, -1, counterInts[0], 2, 1);
-      counterValues[1] = pulseTrain(tTime, counterBStates, 0, -1, counterInts[1], 2, 1);
+      writeValues[0] = pulseTrain(tTime, chanAStates, baselineA, nPulseA,delayTimeA, pulseTimeA, stimAmp_chanA);
+      writeValues[1] = pulseTrain(tTime, chanBStates, baselineB, nPulseB,delayTimeB, pulseTimeB, stimAmp_chanB);
+      counterValues[0] = pulseTrain(tTime, counterAStates, 0, -1, counterDelta[0], counterPulseWidth, 1);
+      counterValues[1] = pulseTrain(tTime, counterBStates, 0, -1, counterDelta[1], counterPulseWidth, 1);
 
       analogWrites();
       digitalWrites();
@@ -205,7 +206,12 @@ void fStim() {
 
     else if (tTime > trainDur) {
       pulsing = 0;
+      writeValues[0]=0; // do i need these?
+      writeValues[1]=0;
+      counterValues[0]=0;
+      counterValues[1]=0;
       analogWrites();
+      digitalWrites();
       analogReads();
 
     }
@@ -217,69 +223,6 @@ void loop()
 {
 }
 
-
-void spitVars() {
-
-  Serial.print("vars");
-  Serial.print(',');
-  Serial.print(pyState);
-  Serial.print(',');
-  Serial.print(pulseTimeA);
-  Serial.print(',');
-  Serial.print(delayTimeA);
-  Serial.print(',');
-  Serial.print(stimAmp_chanA);
-  Serial.print(',');
-  Serial.print(nPulseA);
-  Serial.print(',');
-  Serial.print(baselineA);
-  Serial.print(',');
-  Serial.print(pulseTimeB);
-  Serial.print(',');
-  Serial.print(delayTimeB);
-  Serial.print(',');
-  Serial.print(stimAmp_chanB);
-  Serial.print(',');
-  Serial.print(nPulseB);
-  Serial.print(',');
-  Serial.print(baselineB);
-  Serial.print(',');
-  Serial.print(trainDur);
-  Serial.print(',');
-  Serial.print(counterInts[0]);
-  Serial.print(',');
-  Serial.println(counterInts[1]);
-
-}
-
-
-void spitData() {
-
-  Serial.print("data");
-  Serial.print(',');
-  Serial.print(tTime);
-  Serial.print(',');
-  Serial.print(writeValues[0]);
-  Serial.print(',');
-  Serial.print(writeValues[1]);
-  Serial.print(',');
-  Serial.print(readValues[0]);
-  Serial.print(',');
-  Serial.print(readValues[1]);
-  Serial.print(',');
-  Serial.print(readValues[2]);
-  Serial.print(',');
-  Serial.print(readValues[3]);
-  Serial.print(',');
-  Serial.print(readValues[4]);
-  Serial.print(',');
-  Serial.print(counterValues[0]);
-  Serial.print(',');
-  Serial.print(millis() - initArTime);
-  Serial.print(',');
-  Serial.println(pulsing); // debug jank
-
-}
 
 bool flagReceive(char varAr[], int valAr[]) {
   static boolean recvInProgress = false;
@@ -346,8 +289,8 @@ void assignVars() {
   baselineB = knownValues[10];
 
   trainDur = knownValues[11];
-  counterInts[0]=knownValues[12];
-  counterInts[1]=knownValues[13];
+  counterDelta[0]=knownValues[12];
+  counterDelta[1]=knownValues[13];
 
 }
 
@@ -377,13 +320,21 @@ void digitalWrites() {
 
 
 
+// ****************************************************************
+// **************  Pulse Train Function ***************************
+// ****************************************************************
 
-// %%%%%%%%%% Pulse Train Function
 int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
                int delayTime, int pulseTime, int stimAmp) {
   bool infPulse = 0;
   if (nPulse < 0) {
     infPulse = 1;
+  }
+
+  if (delayTime<=0){
+    stimAmp=0;
+    infPulse=0;
+    nPulse=0;
   }
 
   int writeVal = 0;
@@ -451,3 +402,72 @@ int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
   chanStates[2] = chanStates[2] + 1;
   return writeVal;
 }
+
+// *************************************
+// *********** Serial Writes/Reads *****
+
+void spitVars() {
+
+  Serial.print("vars");
+  Serial.print(',');
+  Serial.print(pyState);
+  Serial.print(',');
+  Serial.print(pulseTimeA);
+  Serial.print(',');
+  Serial.print(delayTimeA);
+  Serial.print(',');
+  Serial.print(stimAmp_chanA);
+  Serial.print(',');
+  Serial.print(nPulseA);
+  Serial.print(',');
+  Serial.print(baselineA);
+  Serial.print(',');
+  Serial.print(pulseTimeB);
+  Serial.print(',');
+  Serial.print(delayTimeB);
+  Serial.print(',');
+  Serial.print(stimAmp_chanB);
+  Serial.print(',');
+  Serial.print(nPulseB);
+  Serial.print(',');
+  Serial.print(baselineB);
+  Serial.print(',');
+  Serial.print(trainDur);
+  Serial.print(',');
+  Serial.print(counterDelta[0]);
+  Serial.print(',');
+  Serial.println(counterDelta[1]);
+
+}
+
+
+void spitData() {
+
+  Serial.print("data");
+  Serial.print(',');
+  Serial.print(tTime);
+  Serial.print(',');
+  Serial.print(writeValues[0]);
+  Serial.print(',');
+  Serial.print(writeValues[1]);
+  Serial.print(',');
+  Serial.print(readValues[0]);
+  Serial.print(',');
+  Serial.print(readValues[1]);
+  Serial.print(',');
+  Serial.print(readValues[2]);
+  Serial.print(',');
+  Serial.print(readValues[3]);
+  Serial.print(',');
+  Serial.print(readValues[4]);
+  Serial.print(',');
+  Serial.print(readValues[5]);
+  Serial.print(',');
+  Serial.print(counterValues[0]);
+  Serial.print(',');
+  Serial.print(counterValues[1]);
+  Serial.print(',');
+  Serial.println(pulsing); // debug jank
+
+}
+

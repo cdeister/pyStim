@@ -1,4 +1,4 @@
-# pyStim v1.1
+# pyStim v1.2
 # _________________
 # Works with microcontrollers that have hardward DACs, like the Teensy 3 line.
 # It is intended to be used with a Teensy3.5/3.6, both of which have 2 analog outs.
@@ -11,7 +11,6 @@
 # todo: amp CSV; end session button behavior; 
 # minor animal meta self.animalID_tv.set(os.path.basename(self.selectPath))
 
-# dep warnings: from_csv should be read_csv (but args are WAY dif)
 
 # *****************************
 # **** Import Dependencies ****
@@ -47,8 +46,8 @@ class psVariables:
 			'animalID':"an1",'totalTrials':5,'uiUpdateSamps':250,'sRate':1000,\
 			'sampsToPlot':5000,'comPath':"/dev/cu.usbmodem3165411",'fps':15,\
 			'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':12,\
-			'dacBitDepth':12,'varCount':15,'sNum':1,'dataCount':12,\
-			'tNum':1,'tDur':4,'timeToPlot':1,'cntrFreqA':1000,'cntrFreqB':1000}
+			'dacBitDepth':12,'varCount':15,'sNum':1,'dataCount':13,\
+			'tNum':1,'tDur':4,'timeToPlot':1,'cntrFreqA':0,'cntrFreqB':0}
 
 		elif a==1:
 
@@ -68,7 +67,7 @@ class psVariables:
 		# 2) If it does not exist make it
 		if a==0:
 			ptVarD = {'dwellTime':0.005,'pulseTime':0.05,'nPulses':20,\
-			'pulseAmpV':1.3,'baselineTime':0.5,'stimType':1};
+			'pulseAmpV':1.3,'baselineTime':0.5,'stimType':1}
 		
 		elif a==1:
 		
@@ -157,8 +156,8 @@ class psData:
 			exec('psData.{}=[]'.format(psData.sessionStores[x]))
 
 	def initTrialData(self):
-		psData.trialStores='tm','v1','v2','rv1','rv2','rv3','rv4','rv5','rv6','tC','pS'
-		psData.trialStoresIDs=[1,2,3,4,5,6,7,8,9,10,11]
+		psData.trialStores='tm','aOut1','aOut2','aIn1','aIn2','aIn3','aIn4','aIn5','aIn6','cnt1','cnt2','pS'
+		psData.trialStoresIDs=[1,2,3,4,5,6,7,8,9,10,11,12]
 		for x in range(0,len(psData.trialStores)): 
 			exec('psData.{}=[]'.format(psData.trialStores[x]))
 
@@ -188,62 +187,114 @@ class psData:
 		print('{}_trial_{} done; pre took {}'.format(animalID,tNum,tpTime))
 
 class psPlot:
-
+	
 	def trialPlotFig(self):
-
-		plt.style.use('dark_background')
-		self.trialFramePosition='+370+0' # can be specified elsewhere
-		self.updateTrialAxes=0
 		
-		self.trialFig = plt.figure(100,figsize=(4,5), dpi=100)
+		# initialize the data containers so we can query the labels.
+		psData.initTrialData(self)
+
+		# make a list of colors to use
+		self.chanColors="olive","cornflowerblue","red","olive","cornflowerblue","red","olive","cornflowerblue","red"
+		 #,"black","yellow","green","blue"
+		
+		# initialize containers to store line names and colors
+		self.curLines=[]
+		self.curColors=[]
+		self.chansToPlotNow=[3,4,5]
+		for x in self.chansToPlotNow:
+			self.curLines.append(psData.trialStores[x])
+			# if there is a color for that index use it
+			try:
+				self.curColors.append(self.chanColors[x])
+			# otherwise use black
+			except:
+				self.curColors.append("black")
+		
+
+		self.lastLines="aIn1","aIn2"
+		self.lastColors="olive","cornflowerblue"
+
 		tNum=int(self.sesVarD['tNum'])-(self.lastTrial)
-		self.trialFig.suptitle('trial # {} of {}'.format(tNum,\
-			int(self.sesVarD['totalTrials'])),fontsize=10)
+		totTr=int(self.sesVarD['totalTrials'])
+		maxTime=int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])
+		
+		useDark=0
+		if useDark:
+			plt.style.use('dark_background')
+
+		self.trialFramePosition='+360+0' # can be specified elsewhere
+		self.updateTrialAxes=0
+		self.trialPlotFig_fontSize=10
+		fSz=self.trialPlotFig_fontSize
+		fNum=100
+
+		
+		# Make the trial figure.
+		self.trialFig = plt.figure(fNum,figsize=(5,5), dpi=100)
+		self.trialFig.suptitle('trial # {} of {}'.format(tNum,totTr),fontsize=fSz)
 		self.trialFig.subplots_adjust(wspace=0.1,hspace=0.2)
 		
 		mng = plt.get_current_fig_manager()
 		eval('mng.window.wm_geometry("{}")'.format(self.trialFramePosition))
-		self.positionAxes=plt.subplot2grid([2,2],(0,0),colspan=2,rowspan=1)
-		self.positionAxes.set_yticks([])
-		self.positionAxes.set_xticks([])
-		self.positionAxes.set_ylim([-100,2**12+1000])
-		self.positionAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
-		self.positionAxes.set_title('current trial',fontsize=10)
-		self.positionLine,=self.positionAxes.plot([1,1],color="olive",lw=1)
-		self.positionLine2,=self.positionAxes.plot([1,1],color="cornflowerblue",lw=1)
+
+		# Top is current ongoing trial
+		self.curReadAx_yLim=[-100,4196]
+		self.curReadAx_xLim=[0,maxTime]
+
+		self.curReadAx=plt.subplot2grid([2,2],(0,0),colspan=2,rowspan=1)
+		# self.curReadAx.set_yticks([])
+		self.curReadAx.set_xticks([])
+		self.curReadAx.set_ylim([self.curReadAx_yLim[0],self.curReadAx_yLim[1]])
+		self.curReadAx.set_xlim([self.curReadAx_xLim[0],self.curReadAx_xLim[1]])
+		self.curReadAx.set_title('current trial',fontsize=fSz)
+
+		# Initialize the lines that we will track. 
+		for x in range(0,len(self.curLines)):
+			exec('self.{},=self.curReadAx.plot([1,1],color="{}",lw=1)'.\
+				format(self.curLines[x],self.curColors[x]))
+
 		plt.show(block=False)
 
-		self.lastTrialAxes=plt.subplot2grid([2,2],(1,0),colspan=2,rowspan=1)
-		self.lastTrialAxes.set_yticks([])
-		self.lastTrialAxes.set_ylim([-500,2**12+1000])
-		self.lastTrialAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
-		self.lastTrialAxes.set_title('last trial',fontsize=10)
-		self.lastDataLine,=self.lastTrialAxes.plot([1,1],color="olive",lw=1)
-		self.lastDataLine2,=self.lastTrialAxes.plot([1,1],color="cornflowerblue",lw=1)
+		# Bottom is the last trial.
+		self.lastAx_yLim=[-100,4196]
+		self.lastAx_xLim=[0,maxTime]
+
+		self.lastAx=plt.subplot2grid([2,2],(1,0),colspan=2,rowspan=1)
+		self.lastAx.set_ylim([self.lastAx_yLim[0],self.lastAx_yLim[1]])
+		self.lastAx.set_xlim([self.lastAx_xLim[0],self.lastAx_xLim[1]])
+		self.lastAx.set_title('last trial',fontsize=10)
+
+		for x in range(0,len(self.lastLines)):
+			exec('self.last_{},=self.lastAx.plot([1,1],color="{}",lw=1)'.\
+				format(self.lastLines[x],self.lastColors[x]))
+		
 		plt.show(block=False)
 
 	def updateTrialFig(self):
-		
+
+		tNum=int(self.sesVarD['tNum'])-(self.lastTrial)
+		totTr=int(self.sesVarD['totalTrials'])
+		maxTime=int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])
+
 		splt=int(self.sesVarD['sampsToPlot'])
-		posPltYData=np.array(psData.rv1[-int(splt):])
-		posPltYData2=np.array(psData.rv2[-int(splt):])
-		self.lastTrialAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
-		self.positionAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
 		x0=np.array(psData.tm[-int(splt):])
 
-		tNum=(int(self.sesVarD['tNum'])+1)-(self.lastTrial)
-		self.trialFig.suptitle('trial # {} of {}'.format(tNum,\
-			int(self.sesVarD['totalTrials'])),fontsize=10)
+		for x in range(0,len(self.curLines)):
+			exec('yData_{}=np.array(psData.{}[-int({}):])'.format(self.curLines[x],self.curLines[x],splt))
 		
-		if len(x0)>1 and self.dumpPlot==0:
-			self.positionLine.set_xdata(x0)
-			self.positionLine.set_ydata(posPltYData)
-			self.positionLine2.set_xdata(x0)
-			self.positionLine2.set_ydata(posPltYData2)
-			self.positionAxes.draw_artist(self.positionLine)
-			self.positionAxes.draw_artist(self.positionLine2)
-			self.positionAxes.draw_artist(self.positionAxes.patch)
-
+		self.curReadAx_xLim=[0,maxTime]
+		self.lastAx.set_xlim([0,maxTime])
+		self.curReadAx.set_xlim([0,maxTime])
+		
+		
+		self.trialFig.suptitle('trial # {} of {}'.format(tNum,totTr),fontsize=10)
+		
+		if len(x0)>1:
+			for x in range(0,len(self.curLines)):
+				exec('self.{}.set_xdata(x0)'.format(self.curLines[x]))
+				exec('self.{}.set_ydata(yData_{})'.format(self.curLines[x],self.curLines[x]))
+				exec('self.curReadAx.draw_artist(self.{})'.format(self.curLines[x]))
+			self.curReadAx.draw_artist(self.curReadAx.patch)
 			self.trialFig.canvas.draw_idle()
 
 		self.trialFig.canvas.flush_events()
@@ -251,20 +302,20 @@ class psPlot:
 	def updateLastTrialFig(self):
 		
 		dT=np.divide(1,int(self.sesVarD['sRate']))
-		posPltYData=np.array(psData.v1)
-		posPltYData2=np.array(psData.v2)
-		self.lastTrialAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
-		self.positionAxes.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
+		posPltYData=np.array(psData.aOut1)
+		posPltYData2=np.array(psData.aOut1)
+		self.lastAx.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
+		self.curReadAx.set_xlim([0,int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])])
 
 		x0=np.array(psData.tm)    
 
-		self.lastDataLine.set_xdata(x0)
-		self.lastDataLine.set_ydata(posPltYData)
-		self.lastDataLine2.set_xdata(x0)
-		self.lastDataLine2.set_ydata(posPltYData2)
-		self.lastTrialAxes.draw_artist(self.lastDataLine)
-		self.lastTrialAxes.draw_artist(self.lastDataLine2)
-		self.lastTrialAxes.draw_artist(self.lastTrialAxes.patch)
+		self.last_aIn1.set_xdata(x0)
+		self.last_aIn1.set_ydata(posPltYData)
+		self.last_aIn2.set_xdata(x0)
+		self.last_aIn2.set_ydata(posPltYData2)
+		self.lastAx.draw_artist(self.last_aIn1)
+		self.lastAx.draw_artist(self.last_aIn2)
+		self.lastAx.draw_artist(self.lastAx.patch)
 
 		self.trialFig.canvas.draw_idle()
 
@@ -531,7 +582,6 @@ class psWindow:
 			self.sesVarD["totalTrials"]=self.loadedTrials
 			psUtil.refreshGuiFromDict(self,self.sesVarD)
 
-
 	def addSerialBlock(self,startRow):
 		
 		self.startRow = startRow
@@ -728,7 +778,6 @@ class pyStim:
 				format('ptVarD_' +\
 			 self.analogOutChannels[x]))
 	
-	# This is the main show: 	
 	def runStimSession(self):
 
 		pyStim.configChans(self)
@@ -761,9 +810,6 @@ class pyStim:
 				if tC>self.loadedTrials:
 					tC=1
 			
-			# psUtil.refreshDictFromGui(self,"sesVarD")
-			# psUtil.refreshDictFromGui(self,"ptVarD_chan0")
-			# psUtil.refreshDictFromGui(self,"ptVarD_chan1")
 
 			self.initPulseTrain()
 			self.pulseTrainTrial()
@@ -819,7 +865,7 @@ class pyStim:
 
 		psData.trialNumber.append(int(self.sesVarD['tNum']))
 		psData.trialTime.append(psData.tm[-1])
-		psData.preTime.append(psData.tC[0])
+		# psData.preTime.append(psData.tC[0])
 		psData.stimType.append(self.s)
 		psData.trialDuration.append(int(self.sesVarD['tDur']*self.sesVarD['sRate']))
 		psData.stimAmp_ChanA.append((self.ptVarD_chan0['pulseAmpV']/3.3)*4095)
@@ -959,7 +1005,6 @@ class pyStim:
 							self.rxBit=0
 							self.s=sentState
 
-						
 						elif sentState != 0:
 							self.txBit=0
 
