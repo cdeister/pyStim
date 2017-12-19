@@ -802,9 +802,9 @@ class pyStim:
 		for x in range(0,len(psData.trialStores)):
 			tCo=eval('psData.{}'.format(psData.trialStores[x]))
 			if x==0:
-				rf=pd.DataFrame({'psData.{}'.format(psData.trialStores[x]):tCo})
+				rf=pd.DataFrame({'{}'.format(psData.trialStores[x]):tCo})
 			elif x != 0:
-				tf=pd.DataFrame({'psData.{}'.format(psData.trialStores[x]):tCo})
+				tf=pd.DataFrame({'{}'.format(psData.trialStores[x]):tCo})
 				rf=pd.concat([rf,tf],axis=1)
 
 		psUtil.refreshSubDirs(self)
