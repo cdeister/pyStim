@@ -1,2 +1,2 @@
-_ Use file vars or not **** (radio button)
 _ save/browse edited trial vars
+_ toggle channels

@@ -46,8 +46,9 @@ class psVariables:
 			'animalID':"an1",'totalTrials':5,'uiUpdateSamps':250,'sRate':1000,\
 			'sampsToPlot':5000,'comPath':"/dev/cu.usbmodem3165411",'fps':15,\
 			'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':12,\
-			'dacBitDepth':12,'varCount':15,'sNum':1,'dataCount':13,\
-			'tNum':1,'tDur':4,'timeToPlot':1,'cntrFreqA':0,'cntrFreqB':0}
+			'dacBitDepth':12,'varCount':20,'sNum':1,'dataCount':13,\
+			'tNum':1,'tDur':4,'timeToPlot':1,'cntrFreqA':0,'cntrFreqB':0,\
+			'orient':0,'runTask':1,'sFreq':10,'tFreq':10,'contrast':1}
 
 		elif a==1:
 
@@ -58,6 +59,7 @@ class psVariables:
 
 		psUtil.refreshGuiFromDict(self,sesVarD)
 		psVariables.dictToPandas(self,sesVarD,idString)
+
 
 	def setPulseTrainVars(self,idString):
 		
@@ -151,7 +153,7 @@ class psData:
 
 	def initSessionData(self):
 		psData.sessionStores='trialNumber','trialTime','preTime','stimType',\
-		'trialDuration','stimAmp_ChanA','stimAmp_ChanB'
+		'trialDuration','stimAmp_ChanA','stimAmp_ChanB','orient',
 		for x in range(0,len(psData.sessionStores)):
 			exec('psData.{}=[]'.format(psData.sessionStores[x]))
 
@@ -163,10 +165,12 @@ class psData:
 
 	def initTeensyStateData(self):
 
-		psData.varHeader='','a','b','c','d','e','f','g','h','i','j','k','l','m','n'	
+		psData.varHeader= '','a','b','c','d','e','f','g','h','i','j','k','l',\
+		 'm','n','o','r','s','t','u' 
 		psData.varNames='head','state','pDurA','iPIntA','pAmpA','nPulsesA','bDurA',\
-		'pDurB','iPIntB','pAmpB','nPulsesB','bDurB','tDur','cntrFreqA','cntrFreqB'
-		psData.varNums=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14]
+		'pDurB','iPIntB','pAmpB','nPulsesB','bDurB','tDur','cntrFreqA','cntrFreqB',\
+		'orient','runTask','sFreq','tFreq','contrast'
+		psData.varNums=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
 
 	def saveTrialData(self):
 
@@ -200,7 +204,7 @@ class psPlot:
 		# initialize containers to store line names and colors
 		self.curLines=[]
 		self.curColors=[]
-		self.chansToPlotNow=[3,4,5]
+		self.chansToPlotNow=[3,9,10]
 		for x in self.chansToPlotNow:
 			self.curLines.append(psData.trialStores[x])
 			# if there is a color for that index use it
@@ -789,11 +793,20 @@ class pyStim:
 
 		psVariables.dictToPandas(self,self.sesVarD,'sesVarD')
 		self.lastTrial=int(self.sesVarD['tNum'])
-		
+		self.orientList=[0,10,20,30,40,50,60,70,80,90]
+		self.runTask=1
+		self.sFreq=10
+		self.tFreq=10
+		self.contrast=1
 		pyStim.connectTeensy(self)
 		tC=1
 		lC=1
 		while (int(self.sesVarD['tNum'])-self.lastTrial)<int(self.sesVarD['totalTrials']):
+			try:
+				self.orient=self.orientList[tC]
+			except:
+				self.orient=270
+
 			if self.loadedCh0:
 				if self.useCSV.get():
 					psVariables.pandasToDict(self,self.ptVarD_chan0_pandaFrame,self.ptVarD_chan0,tC)
@@ -809,8 +822,8 @@ class pyStim:
 			if self.loopCSV.get():
 				if tC>self.loadedTrials:
 					tC=1
-			
 
+			
 			self.initPulseTrain()
 			self.pulseTrainTrial()
 			pyStim.saveTrialData(self)
@@ -835,7 +848,6 @@ class pyStim:
 
 		sR=comObj.readline().strip().decode()
 		sR=sR.split(',')
-
 		if len(sR)==headerCount and sR[0]==headerString:
 			newData=1
 		else:
@@ -922,6 +934,8 @@ class pyStim:
 
 		self.varCount=int(self.sesVarD['varCount'])
 		self.dataCount=int(self.sesVarD['dataCount'])
+
+
 
 		
 		self.current_milli_time = lambda: int(round(time.time() * 1000))
@@ -1031,6 +1045,12 @@ class pyStim:
 
 					cntrFreqA=self.sesVarD['cntrFreqA']
 					cntrFreqB=self.sesVarD['cntrFreqB']
+					orient=self.orient; #
+					runTask=self.runTask; #self.sesVarD['runTask']
+					sFreq=self.sFreq
+					tFreq=self.tFreq; #self.sesVarD['tFreq']
+					contrast=self.contrast #self.sesVarD['contrast']
+
 					pST=self.current_milli_time()
 					self.varsSent=0
 					self.resetVariables=1

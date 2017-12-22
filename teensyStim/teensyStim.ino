@@ -3,15 +3,16 @@
    I assume you have a 3.5 or 3.6 and have 2 outs. But you can easily go to 1.
    I use the builtin FlexiTimer2 to handle the interupts for timing.
    v1.15 - tweaks
-   q2/X/2017
+   12/X/2017
    cdeister@brown.edu
    # Anything that is licenseable is governed by an MIT License in the github directory.
 */
 
 #include <FlexiTimer2.h>
+#define visSerial Serial1
 
 // Set DAC and ADC resolution in bits.
-int adcResolution = 12; 
+int adcResolution = 12;
 int dacResolution = 12;
 
 // Interupt Timing Params.
@@ -28,26 +29,41 @@ float initArTime;
 bool pulsing = 0;
 
 // train vals that we look for (set elsewhere; python)
-char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n'};
-int knownValues[] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'r', 's', 't', 'u'};
+int knownValues[] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
 
 
 // init vars
 int pyState = knownValues[0];
+
+// pulse train chan a
 int pulseTimeA = knownValues[1];
 int delayTimeA = knownValues[2];
 int stimAmp_chanA = knownValues[3];
 int nPulseA = knownValues[4];
 int baselineA = knownValues[5];
+
+// pulse train chan b
 int pulseTimeB = knownValues[6];
 int delayTimeB = knownValues[7];
 int stimAmp_chanB = knownValues[8];
 int nPulseB = knownValues[9];
 int baselineB = knownValues[10];
+
+// trial duration
 int trainDur = knownValues[11];
 
+//counter variables
+// counterDelta[0] = knownValues[12];
+// counterDelta[1] = knownValues[13];
 
+// visual
+int orient = knownValues[14];
+int runTask = knownValues[15];
+int sFreq = knownValues[16];
+int tFreq = knownValues[17];
+int contrast = knownValues[18];
 
 // analog outputs
 int dacCount = 2;
@@ -64,14 +80,14 @@ int readValues[] = {0, 0, 0, 0, 0, 0};
 // triggers
 int triggerCount = 6;
 int triggerChans[] = {6};
-char triggerLabels[]={"scope"};
+char triggerLabels[] = {"scope"};
 
 // counter outs
 int counterCount = 2;
-int counterPulseWidth = 2; // in samples
+int counterPulseWidth = 5; // in samples
 int counterChans[] = {25, 13};
 int counterValues[] = {0, 0};
-int counterDelta[] = {-1,-1}; // in samples
+int counterDelta[] = { -1, -1}; // in samples
 int counterAStates[] = {0, 0, 0, 0};
 int counterBStates[] = {0, 0, 0, 0};
 
@@ -80,11 +96,12 @@ int counterBStates[] = {0, 0, 0, 0};
 void setup() {
 
   Serial.begin(115200);
+  visSerial.begin(9600);
   delay(2);
 
   analogWriteResolution(dacResolution);
   analogReadResolution(adcResolution);
-  
+
   // set the output counters
   for ( int i = 0; i < counterCount; i++) {
     pinMode(counterChans[i], OUTPUT);
@@ -94,7 +111,7 @@ void setup() {
   for ( int i = 0; i < triggerCount; i++) {
     pinMode(triggerChans[i], OUTPUT);
   }
-  
+
   FlexiTimer2::set(1, evalEverySample / sampsPerSecond, fStim); // call ever
   FlexiTimer2::start();
 
@@ -116,21 +133,21 @@ void fStim() {
   // **********************************
 
   if (pyState == 0) {
-    
+
     while (Serial.available()) {
       Serial.read();
     }
-    
+
     resetVars();
 
     // reset time and trial state vars.
     tTime = 0;
     pulsing = 0; // super jank
-    
+
     assignVars();
-    
-    
-    
+
+
+
     writeValues[0] = 0;
     writeValues[1] = 0;
 
@@ -153,9 +170,10 @@ void fStim() {
     counterBStates[1] = 0;
     counterBStates[2] = 0;
     counterBStates[3] = 0;
-    
+
     counterValues[0] = 0;
     counterValues[1] = 0;
+
 
   }
 
@@ -168,6 +186,9 @@ void fStim() {
     initArTime = millis();
   }
 
+  // **********************************
+  // STATE #2 is the pulse/vis stim state.
+  // **********************************-
   else if (pyState == 2) {
 
     // always increment time and see if we are out of it
@@ -191,12 +212,13 @@ void fStim() {
       // END -  trigger stuff
       // **************************
 
-
-      writeValues[0] = pulseTrain(tTime, chanAStates, baselineA, nPulseA,delayTimeA, pulseTimeA, stimAmp_chanA);
-      writeValues[1] = pulseTrain(tTime, chanBStates, baselineB, nPulseB,delayTimeB, pulseTimeB, stimAmp_chanB);
+     
+      writeValues[0] = pulseTrain(tTime, chanAStates, baselineA, nPulseA, delayTimeA, pulseTimeA, stimAmp_chanA);
+      writeValues[1] = pulseTrain(tTime, chanBStates, baselineB, nPulseB, delayTimeB, pulseTimeB, stimAmp_chanB);
       counterValues[0] = pulseTrain(tTime, counterAStates, 0, -1, counterDelta[0], counterPulseWidth, 1);
       counterValues[1] = pulseTrain(tTime, counterBStates, 0, -1, counterDelta[1], counterPulseWidth, 1);
-
+      
+      spitVisual();
       analogWrites();
       digitalWrites();
       analogReads();
@@ -205,11 +227,12 @@ void fStim() {
     }
 
     else if (tTime > trainDur) {
+      
       pulsing = 0;
-      writeValues[0]=0; // do i need these?
-      writeValues[1]=0;
-      counterValues[0]=0;
-      counterValues[1]=0;
+      writeValues[0] = 0; // do i need these?
+      writeValues[1] = 0;
+      counterValues[0] = 0;
+      counterValues[1] = 0;
       analogWrites();
       digitalWrites();
       analogReads();
@@ -238,11 +261,11 @@ bool flagReceive(char varAr[], int valAr[]) {
   while (Serial.available() > 0 && newData == 0) {
     rc = Serial.read();
     if (recvInProgress == false) {
-      for ( int i = 0; i < 14; i++) {
+      for ( int i = 0; i < 19; i++) {
         if (rc == varAr[i]) {
           selectedVar = i;
           recvInProgress = true;
-          Serial.println(selectedVar);
+          Serial.println(selectedVar); // delete
         }
       }
     }
@@ -289,13 +312,18 @@ void assignVars() {
   baselineB = knownValues[10];
 
   trainDur = knownValues[11];
-  counterDelta[0]=knownValues[12];
-  counterDelta[1]=knownValues[13];
+  counterDelta[0] = knownValues[12];
+  counterDelta[1] = knownValues[13];
 
+  orient = knownValues[14];
+  runTask = knownValues[15];
+  sFreq = knownValues[16];
+  tFreq = knownValues[17];
+  contrast = knownValues[18];
 }
 
 void resetVars() {
-  for ( int i = 0; i < 14; i++) {
+  for ( int i = 0; i < 19; i++) {
     knownValues[i] = -1;
   }
 }
@@ -331,10 +359,10 @@ int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
     infPulse = 1;
   }
 
-  if (delayTime<=0){
-    stimAmp=0;
-    infPulse=0;
-    nPulse=0;
+  if (delayTime <= 0) {
+    stimAmp = 0;
+    infPulse = 0;
+    nPulse = 0;
   }
 
   int writeVal = 0;
@@ -346,6 +374,7 @@ int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
     if (cTime <= blDur) {
       chanStates[1] = 0; // in pulse?
       chanStates[2] = 0; // state counter
+//      contrast = 0;
     }
 
     else if (cTime > blDur) {
@@ -355,6 +384,7 @@ int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
       writeVal = stimAmp; // write the first value
     }
   }
+  
   // ***** END baseline state
 
   // ***** Pulse State
@@ -394,6 +424,7 @@ int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
 
       else if (chanStates[3] >= nPulse) {
         chanStates[1] = 0; // stay in the dwell state
+//        contrast=0;        
       }
     }
   }
@@ -436,8 +467,17 @@ void spitVars() {
   Serial.print(',');
   Serial.print(counterDelta[0]);
   Serial.print(',');
-  Serial.println(counterDelta[1]);
-
+  Serial.print(counterDelta[1]);
+  Serial.print(',');
+  Serial.print(orient);
+  Serial.print(',');
+  Serial.print(runTask);
+  Serial.print(',');
+  Serial.print(sFreq);
+  Serial.print(',');
+  Serial.print(tFreq);
+  Serial.print(',');
+  Serial.println(contrast);
 }
 
 
@@ -468,6 +508,34 @@ void spitData() {
   Serial.print(counterValues[1]);
   Serial.print(',');
   Serial.println(pulsing); // debug jank
+
+}
+
+void spitVisual() {
+  visSerial.print('o');
+  visSerial.print(',');
+  visSerial.println(orient);
+
+  visSerial.print('r');
+  visSerial.print(',');
+  visSerial.println(runTask);
+
+
+  visSerial.print('s');
+  visSerial.print(',');
+  visSerial.println(sFreq);
+
+
+  visSerial.print('t');
+  visSerial.print(',');
+  visSerial.println(tFreq);
+
+
+  visSerial.print('u');
+  visSerial.print(',');
+  visSerial.println(contrast);
+
+
 
 }
 
