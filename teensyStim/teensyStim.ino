@@ -29,9 +29,9 @@ float initArTime;
 bool pulsing = 0;
 
 // train vals that we look for (set elsewhere; python)
-char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'r', 's', 't', 'u'};
-int knownValues[] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-
+char knownHeaders[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'r', 's', 't', 'u','v'};
+int knownValues[] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,-1};
+int knownCount = 20;
 
 
 // init vars
@@ -64,6 +64,8 @@ int runTask = knownValues[15];
 int sFreq = knownValues[16];
 int tFreq = knownValues[17];
 int contrast = knownValues[18];
+int vTrial = knownValues[18];
+bool h_s0 = 0;
 
 // analog outputs
 int dacCount = 2;
@@ -125,6 +127,7 @@ void fStim() {
 
     assignVars();
     spitVars();
+    spitVisual();
 
   }
 
@@ -137,8 +140,12 @@ void fStim() {
     while (Serial.available()) {
       Serial.read();
     }
-
     resetVars();
+
+    if (h_s0 == 0) {
+      resetVars();
+      h_s0 = 1;
+    }
 
     // reset time and trial state vars.
     tTime = 0;
@@ -174,7 +181,6 @@ void fStim() {
     counterValues[0] = 0;
     counterValues[1] = 0;
 
-
   }
 
 
@@ -184,6 +190,7 @@ void fStim() {
   // **********************************
   else if (pyState == 1) {
     initArTime = millis();
+    h_s0 = 0;
   }
 
   // **********************************
@@ -212,13 +219,12 @@ void fStim() {
       // END -  trigger stuff
       // **************************
 
-     
+
       writeValues[0] = pulseTrain(tTime, chanAStates, baselineA, nPulseA, delayTimeA, pulseTimeA, stimAmp_chanA);
       writeValues[1] = pulseTrain(tTime, chanBStates, baselineB, nPulseB, delayTimeB, pulseTimeB, stimAmp_chanB);
       counterValues[0] = pulseTrain(tTime, counterAStates, 0, -1, counterDelta[0], counterPulseWidth, 1);
       counterValues[1] = pulseTrain(tTime, counterBStates, 0, -1, counterDelta[1], counterPulseWidth, 1);
-      
-      spitVisual();
+
       analogWrites();
       digitalWrites();
       analogReads();
@@ -227,7 +233,7 @@ void fStim() {
     }
 
     else if (tTime > trainDur) {
-      
+
       pulsing = 0;
       writeValues[0] = 0; // do i need these?
       writeValues[1] = 0;
@@ -261,11 +267,10 @@ bool flagReceive(char varAr[], int valAr[]) {
   while (Serial.available() > 0 && newData == 0) {
     rc = Serial.read();
     if (recvInProgress == false) {
-      for ( int i = 0; i < 19; i++) {
+      for ( int i = 0; i < knownCount; i++) {
         if (rc == varAr[i]) {
           selectedVar = i;
           recvInProgress = true;
-          Serial.println(selectedVar); // delete
         }
       }
     }
@@ -320,10 +325,11 @@ void assignVars() {
   sFreq = knownValues[16];
   tFreq = knownValues[17];
   contrast = knownValues[18];
+  vTrial = knownValues[19];
 }
 
 void resetVars() {
-  for ( int i = 0; i < 19; i++) {
+  for ( int i = 0; i < knownCount; i++) {
     knownValues[i] = -1;
   }
 }
@@ -341,7 +347,7 @@ void analogWrites() {
 }
 
 void digitalWrites() {
-  for ( int i = 0; i < 2; i++) {
+  for ( int i = 0; i < counterCount; i++) {
     digitalWrite(counterChans[i], counterValues[i]);
   }
 }
@@ -352,8 +358,8 @@ void digitalWrites() {
 // **************  Pulse Train Function ***************************
 // ****************************************************************
 
-int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
-               int delayTime, int pulseTime, int stimAmp) {
+int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse, int delayTime, int pulseTime, int stimAmp) {
+
   bool infPulse = 0;
   if (nPulse < 0) {
     infPulse = 1;
@@ -374,7 +380,7 @@ int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
     if (cTime <= blDur) {
       chanStates[1] = 0; // in pulse?
       chanStates[2] = 0; // state counter
-//      contrast = 0;
+      //      contrast = 0;
     }
 
     else if (cTime > blDur) {
@@ -384,7 +390,7 @@ int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
       writeVal = stimAmp; // write the first value
     }
   }
-  
+
   // ***** END baseline state
 
   // ***** Pulse State
@@ -424,7 +430,7 @@ int pulseTrain(float cTime, int chanStates[], int blDur,  int nPulse,
 
       else if (chanStates[3] >= nPulse) {
         chanStates[1] = 0; // stay in the dwell state
-//        contrast=0;        
+        //        contrast=0;
       }
     }
   }
@@ -477,7 +483,9 @@ void spitVars() {
   Serial.print(',');
   Serial.print(tFreq);
   Serial.print(',');
-  Serial.println(contrast);
+  Serial.print(contrast);
+  Serial.print(',');
+  Serial.println(vTrial);
 }
 
 
@@ -512,30 +520,21 @@ void spitData() {
 }
 
 void spitVisual() {
-  visSerial.print('o');
-  visSerial.print(',');
-  visSerial.println(orient);
-
-  visSerial.print('r');
-  visSerial.print(',');
-  visSerial.println(runTask);
-
-
-  visSerial.print('s');
-  visSerial.print(',');
-  visSerial.println(sFreq);
-
-
-  visSerial.print('t');
-  visSerial.print(',');
-  visSerial.println(tFreq);
-
-
-  visSerial.print('u');
-  visSerial.print(',');
-  visSerial.println(contrast);
-
-
-
+  // Wait until we've reset all the visual variables, the write it out.
+  if (vTrial >= 0 && orient >= 0 && contrast >= 0 && sFreq >= 0 && tFreq >= 0 && runTask >= 0) {
+    visSerial.print('v');
+    visSerial.print(',');
+    visSerial.print(vTrial);
+    visSerial.print(',');
+    visSerial.print(orient);
+    visSerial.print(',');
+    visSerial.print(contrast);
+    visSerial.print(',');
+    visSerial.print(sFreq);
+    visSerial.print(',');
+    visSerial.print(tFreq);
+    visSerial.print(',');
+    visSerial.println(runTask);
+  }
 }
 
