@@ -46,7 +46,7 @@ class psVariables:
 			'animalID':"an1",'totalTrials':5,'uiUpdateSamps':250,'sRate':1000,\
 			'sampsToPlot':5000,'comPath':"/dev/cu.usbmodem3165411",'fps':4,\
 			'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':12,\
-			'dacBitDepth':12,'varCount':21,'sNum':1,'dataCount':13,\
+			'dacBitDepth':12,'varCount':21,'sNum':1,'dataCount':14,\
 			'tNum':1,'tDur':4,'timeToPlot':1,'cntrFreqA':0,'cntrFreqB':0,\
 			'orient':0,'runTask':1,'sFreq':10,'tFreq':10,'contrast':1,'vTrial':1}
 
@@ -59,7 +59,6 @@ class psVariables:
 
 		psUtil.refreshGuiFromDict(self,sesVarD)
 		psVariables.dictToPandas(self,sesVarD,idString)
-
 
 	def setPulseTrainVars(self,idString):
 		
@@ -158,8 +157,8 @@ class psData:
 			exec('psData.{}=[]'.format(psData.sessionStores[x]))
 
 	def initTrialData(self):
-		psData.trialStores='tm','aOut1','aOut2','aIn1','aIn2','aIn3','aIn4','aIn5','aIn6','cnt1','cnt2','pS'
-		psData.trialStoresIDs=[1,2,3,4,5,6,7,8,9,10,11,12]
+		psData.trialStores='tm','aOut1','aOut2','aIn1','aIn2','aIn3','aIn4','aIn5','aIn6','cnt1','cnt2','aContrast','pS'
+		psData.trialStoresIDs=[1,2,3,4,5,6,7,8,9,10,11,12,13]
 		for x in range(0,len(psData.trialStores)): 
 			exec('psData.{}=[]'.format(psData.trialStores[x]))
 
@@ -824,7 +823,6 @@ class pyStim:
 
 		psData.trialNumber.append(int(self.sesVarD['tNum']))
 		psData.trialTime.append(psData.tm[-1])
-		# psData.preTime.append(psData.tC[0])
 		psData.stimType.append(self.s)
 		psData.trialDuration.append(int(self.sesVarD['tDur']*self.sesVarD['sRate']))
 		psData.stimAmp_ChanA.append((self.ptVarD_chan0['pulseAmpV']/3.3)*4095)
@@ -935,6 +933,20 @@ class pyStim:
 			exec('self.{}_tv.set({})'.format(headerString + "_"  + key,dictName[key]))
 			rowC=rowC+1
 
+	def updateContrast(self,tCont,vTr,tFre,tSFre,tOr):
+		try:
+			pyStim.connectTeensy(self)
+		except:
+			print('already opened')
+		#'orient','runTask','sFreq','tFreq','contrast','vTrial'
+		print("update fired")
+		self.teensy.write('o{}>'.format(tOr).encode('utf-8'))
+		self.teensy.write('r1>'.encode('utf-8'))
+		self.teensy.write('s{}>'.format(tSFre).encode('utf-8'))
+		self.teensy.write('t{}>'.format(tFre).encode('utf-8'))
+		self.teensy.write('u{}>'.format(tCont).encode('utf-8'))
+		self.teensy.write('v{}>'.format(vTr).encode('utf-8'))
+
 	def startVisual(self):
 		try:
 			pyStim.connectTeensy(self)
@@ -977,25 +989,19 @@ class pyStim:
 		psVariables.dictToPandas(self,self.sesVarD,'sesVarD')
 		self.lastTrial=int(self.sesVarD['tNum'])
 		self.loopVis=1
-		self.orientList=[0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+		self.orientList=[0,30,60,90,120,150,180,210,240,270,300,330]
 		self.orient=0
 		self.runTask=1
-		self.sFreq=10
+		self.sFreq=5
 		self.tFreq=10
-		self.contrastList=[100,90,80,70,60,50,40,30,20,10,5,0]
-		self.sFreqList=[10,20,10,20,10,20,10,20,10,20,10,20,10,20]
 		pyStim.connectTeensy(self)
 		# pyStim.startVisual(self)
 		tC=0
 		lC=1
 
 		while (int(self.sesVarD['tNum'])-self.lastTrial)<int(self.sesVarD['totalTrials']):
-			self.contrast=self.contrastList[tC]
 			self.orient=self.orientList[tC]
-			self.sFreq=self.sFreqList[tC]
-
-			
-			print(self.contrast)
+			self.contrast = 0
 			if self.loadedCh0:
 				if self.useCSV.get():
 					psVariables.pandasToDict(self,self.ptVarD_chan0_pandaFrame,self.ptVarD_chan0,tC)
@@ -1012,8 +1018,9 @@ class pyStim:
 				if tC>self.loadedTrials:
 					tC=1
 
-			if self.loopVis and tC>=len(self.contrastList):
+			if self.loopVis and tC>=len(self.orientList):
 					tC=0
+					self.sFreq=self.sFreq+5
 
 			
 			self.initPulseTrain()
@@ -1035,22 +1042,27 @@ class pyStim:
 		psVariables.dictToPandas(self,self.sesVarD,'sesVarD')
 
 	def pulseTrainTrial(self):
-		self.dumpPlot=0
+		
+
 		waitSamps=30*int(self.sesVarD['sRate'])
+
 		while self.inTrial ==1:
-			# handshake with teensy. we start in -1, but want to go to 0
+			
+			# handshake with teensy. we should start in state -1, but want to go to 0 together.
 			if self.s==-1:
 				self.inTrial=1
 				
 				# tell teensy to go to 0.
 				if self.txBit==0:
 					self.teensy.write('a0>'.encode('utf-8'))
+					# let's keep track of how long we wait to get confirmation.
 					waitCount=0
+					# we transmitted, don't do it again.
 					self.txBit=1
 
 				elif self.txBit==1:
 					waitCount=waitCount+1
-					
+					# look for teensy variable changes.
 					self.tR,self.rxBit=self.readSerialData(self.teensy,'vars',self.varCount)
 					
 
@@ -1068,9 +1080,13 @@ class pyStim:
 					elif self.rxBit==0 and waitCount>waitSamps:
 						self.txBit=0
 
+			# **************************************
+			# ***** State 0. Sync State. ***********
+			# **************************************
 			elif self.s==0:
 
-				if initSt==0:					
+				if initSt==0:
+
 					n=1
 					tDur=int(self.sesVarD['tDur']*self.sesVarD['sRate'])
 					
@@ -1093,8 +1109,9 @@ class pyStim:
 					sFreq=self.sFreq
 					tFreq=self.tFreq #self.sesVarD['tFreq']
 					contrast=self.contrast #self.sesVarD['contrast']
+
 					vTrial=int(self.sesVarD['tNum'])
-	
+					pyStim.updateContrast(self,0,vTrial,tFreq,sFreq,orient)	
 
 					pST=self.current_milli_time()
 					self.varsSent=0
@@ -1126,10 +1143,14 @@ class pyStim:
 					elif self.rxBit==0 and waitCount>waitSamps:
 						self.txBit=0
 			
+
+			# **************************************
+			# ***** State 1. Init State. ***********
+			# **************************************
 			elif self.s == 1:
 				
 				if initSt==0:
-
+					pyStim.updateContrast(self,0,vTrial,tFreq,sFreq,orient)	
 					initSt=1
 				
 				if self.varsSent==0:
@@ -1138,7 +1159,6 @@ class pyStim:
 						varCheck=[]
 						
 						for x in range(1,len(self.tR)):
-							
 							curVarTmp=int(self.tR[x])
 							if curVarTmp == -1:
 								varCheck.append(x)
@@ -1149,7 +1169,6 @@ class pyStim:
 							tVal=str(int(eval('{}'.format(psData.varNames[upVar]))))
 							tHead=psData.varHeader[upVar]
 							self.teensy.write('{}{}>'.format(tHead,tVal).encode('utf-8'))
-							
 							self.txBit=1
 							waitCount=0
 							pyStim.updatePlotCheck(self)
@@ -1169,6 +1188,7 @@ class pyStim:
 							self.txBit=0
 
 				elif self.varsSent==1 and doneOnce==0:
+					s2Head=0
 					self.collecting=1
 					initSt=0
 					self.txBit=0
@@ -1177,8 +1197,17 @@ class pyStim:
 					self.s=2
 
 
+			# **************************************
+			# ***** State 2. Stim State. ***********
+			# **************************************
+			
 			elif self.s==2:
 				while self.collecting:
+					if s2Head==0:
+
+						pyStim.updateContrast(self,90,vTrial,tFreq,sFreq,orient)	
+						s2Head=1
+
 					dR,dU=self.readSerialData(self.teensy,'data',self.dataCount)
 					if dU:
 						n=n+1
@@ -1195,23 +1224,27 @@ class pyStim:
 							
 				
 				while self.collecting==0:
+					if s2Head==1:
+
+						pyStim.updateContrast(self,0,vTrial,tFreq,sFreq,orient)	
+						s2Head=0
+					# pyStim.updateContrast(self,0,vTrial,tFreq,sFreq,orient)
 					while self.teensy.in_waiting>0:
 						n=n+1
 						if n % int(self.sesVarD['uiUpdateSamps']) == 0:
 							pyStim.updatePlotCheck(self)
-							self.dumpPlot=1
+							
 						dR,dU=self.readSerialData(self.teensy,'data',self.dataCount)
 						if dU:
 							for x in range(0,len(psData.trialStores)):
 								a=(dR[psData.trialStoresIDs[x]])
 								exec('psData.{}.append({})'.format(psData.trialStores[x],a))
 
-
 					if initSt==0:
 						psPlot.updateLastTrialFig(self)
 						initSt=1
 						
-
+					self.contrast=0
 					self.teensy.write('a0>'.encode('utf-8'))
 					self.inTrial ==0
 					return()

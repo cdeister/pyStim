@@ -515,6 +515,8 @@ void spitData() {
   Serial.print(',');
   Serial.print(counterValues[1]);
   Serial.print(',');
+  Serial.print(contrast);
+  Serial.print(',');
   Serial.println(pulsing); // debug jank
 
 }
