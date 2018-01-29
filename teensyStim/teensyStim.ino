@@ -86,8 +86,8 @@ char triggerLabels[] = {"scope"};
 
 // counter outs
 int counterCount = 2;
-int counterPulseWidth = 5; // in samples
-int counterChans[] = {25, 13};
+int counterPulseWidth = 10; // in samples
+int counterChans[] = {13, 25};
 int counterValues[] = {0, 0};
 int counterDelta[] = { -1, -1}; // in samples
 int counterAStates[] = {0, 0, 0, 0};
@@ -169,12 +169,12 @@ void fStim() {
     chanBStates[3] = 0;
 
     counterAStates[0] = 0;
-    counterAStates[1] = 0;
+    counterAStates[1] = 1;
     counterAStates[2] = 0;
     counterAStates[3] = 0;
 
     counterBStates[0] = 0;
-    counterBStates[1] = 0;
+    counterBStates[1] = 1;
     counterBStates[2] = 0;
     counterBStates[3] = 0;
 

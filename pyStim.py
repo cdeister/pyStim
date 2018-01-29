@@ -43,7 +43,7 @@ class psVariables:
 			'sampsToPlot':5000,'comPath':"/dev/cu.usbmodem3165411",'fps':4,\
 			'baudRate':115200,'dacMaxVal':3.3,'dacMinVal':0,'adcBitDepth':12,\
 			'dacBitDepth':12,'varCount':21,'sNum':1,'dataCount':14,\
-			'tNum':1,'tDur':4,'timeToPlot':1,'cntrFreqA':0,'cntrFreqB':0,\
+			'tNum':1,'tDur':5,'timeToPlot':1,'cntrFreqA':0,'cntrFreqB':0,\
 			'orient':0,'runTask':1,'sFreq':10,'tFreq':10,'contrast':1,'vTrial':1}
 
 		elif a==1:
@@ -361,24 +361,21 @@ class psUtil:
 		# dict string is the base string name of your dict.
 
 		dictName=eval('self.{}'.format(dictString)) #like a pointer
-	
 		
 		for key in list(dictName.keys()):
+			# print(key)
 			try:
 				# we need to append all TVs with their dict name
-				a=eval('self.{}_{}_tv.get()'.format(dictString,key))
+				a=eval('self.{}_tv.get()'.format(key))
 				try:
 					a=float(a)
 					if a.is_integer():
 						a=int(a)
 					exec('dictName["{}"]={}'.format(key,a))
-					
 				except:
-					try:
-						exec('dictName["{}"]="{}"'.format(key,a))
-						
-					except:
-						1	
+
+					exec('dictName["{}"]="{}"'.format(key,a))
+
 			except:
 				a=1+1
 
@@ -391,6 +388,7 @@ class psUtil:
 				a=1+1
 
 	def exportAnimalMeta(self):
+
 
 		psUtil.refreshSubDirs(self)
 		psUtil.refreshDictFromGui(self,"sesVarD")
@@ -774,6 +772,7 @@ class pyStim:
 		baudRate=self.baudSelected.get()
 		teensyPath=self.comPath_tv.get()
 		self.teensy = serial.Serial(teensyPath,baudRate)
+		self.teensy.timeout=0.1
 	
 	def configChans(self):
 		# todo: I enumerate here, to pave path for configurable channels.
@@ -788,24 +787,20 @@ class pyStim:
 		self.teensy.close()
 
 	def readSerialData(self,comObj,headerString,headerCount):
-		try:
-			sR=[]
-			newData=0
-			if comObj.inWaiting()>0:
 
-				sR=comObj.readline().strip().decode()
-				sR=sR.split(',')
-				if len(sR)==headerCount and sR[0]==headerString:
-					newData=1
-				else:
-					newData=0
-				return sR,newData
-		except:
+		sR=[]
+		newData=0
+		if comObj.inWaiting()>0:
 
-			newData=0
-			sR=[]
-			
+			sR=comObj.readline().strip().decode()
+			sR=sR.split(',')
+			if len(sR)==headerCount and sR[0]==headerString:
+				newData=1
+			else:
+				newData=0
 		return sR,newData
+			
+
 
 	def saveTrialData(self):
 		self.dateSvStr = datetime.datetime.fromtimestamp(time.time()).strftime('%H%M_%m%d%Y')
@@ -1264,15 +1259,11 @@ class pyStim:
 						pyStim.updateContrast(self,0,vTrial,tFreq,sFreq,orient)	
 						s2Head=0
 
-					if sampCount>int(self.sesVarD['uiUpdateSamps']):
-						pyStim.updatePlotCheck(self)
-						sampCount=0
+					# if sampCount>int(self.sesVarD['uiUpdateSamps']):
+					# 	pyStim.updatePlotCheck(self)
+					# 	sampCount=0
 
 					while self.teensy.in_waiting>0:
-						if sampCount>int(self.sesVarD['uiUpdateSamps']):
-							pyStim.updatePlotCheck(self)
-							sampCount=0
-
 						dR,dU=self.readSerialData(self.teensy,'data',self.dataCount)
 						if dU:
 							for x in range(0,len(psData.trialStores)):
