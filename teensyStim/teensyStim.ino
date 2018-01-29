@@ -18,7 +18,7 @@ int dacResolution = 12;
 // Interupt Timing Params.
 int sampsPerSecond = 1000; // samples per second
 float evalEverySample = 1.0; // number of times to poll the stim funtion
-int trigTime = 0.01 * sampsPerSecond;
+int trigTime = 0.02 * sampsPerSecond;
 
 // Initialize counter and mc time.
 float tTime = 0;

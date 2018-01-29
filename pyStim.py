@@ -1,4 +1,4 @@
-# pyStim v1.2
+# pyStim v1.3
 # _________________
 # Works with microcontrollers that have hardward DACs, like the Teensy 3 line.
 # It is intended to be used with a Teensy3.5/3.6, both of which have 2 analog outs.
@@ -11,10 +11,6 @@
 # todo: amp CSV; end session button behavior; 
 # minor animal meta self.animalID_tv.set(os.path.basename(self.selectPath))
 
-
-# *****************************
-# **** Import Dependencies ****
-# *****************************
 
 from tkinter import *
 import tkinter.filedialog as fd
@@ -274,7 +270,7 @@ class psPlot:
 		plt.show(block=False)
 
 	def updateTrialFig(self):
-
+		self.canPlot=0
 		tNum=int(self.sesVarD['tNum'])-(self.lastTrial)
 		totTr=int(self.sesVarD['totalTrials'])
 		maxTime=int(self.sesVarD['tDur'])*int(self.sesVarD['sRate'])
@@ -301,6 +297,7 @@ class psPlot:
 			self.trialFig.canvas.draw_idle()
 
 		self.trialFig.canvas.flush_events()
+		self.canPlot=1
 
 	def updateLastTrialFig(self):
 		
@@ -791,13 +788,23 @@ class pyStim:
 		self.teensy.close()
 
 	def readSerialData(self,comObj,headerString,headerCount):
-
-		sR=comObj.readline().strip().decode()
-		sR=sR.split(',')
-		if len(sR)==headerCount and sR[0]==headerString:
-			newData=1
-		else:
+		try:
+			sR=[]
 			newData=0
+			if comObj.inWaiting()>0:
+
+				sR=comObj.readline().strip().decode()
+				sR=sR.split(',')
+				if len(sR)==headerCount and sR[0]==headerString:
+					newData=1
+				else:
+					newData=0
+				return sR,newData
+		except:
+
+			newData=0
+			sR=[]
+			
 		return sR,newData
 
 	def saveTrialData(self):
@@ -938,8 +945,6 @@ class pyStim:
 			pyStim.connectTeensy(self)
 		except:
 			print('already opened')
-		#'orient','runTask','sFreq','tFreq','contrast','vTrial'
-		print("update fired")
 		self.teensy.write('o{}>'.format(tOr).encode('utf-8'))
 		self.teensy.write('r1>'.encode('utf-8'))
 		self.teensy.write('s{}>'.format(tSFre).encode('utf-8'))
@@ -997,6 +1002,7 @@ class pyStim:
 		pyStim.connectTeensy(self)
 		# pyStim.startVisual(self)
 		tC=0
+		sC=0
 		lC=1
 
 		while (int(self.sesVarD['tNum'])-self.lastTrial)<int(self.sesVarD['totalTrials']):
@@ -1014,17 +1020,23 @@ class pyStim:
 			
 			tC=tC+1
 			
+			
 			if self.loopCSV.get():
 				if tC>self.loadedTrials:
 					tC=1
 
 			if self.loopVis and tC>=len(self.orientList):
 					tC=0
-					self.sFreq=self.sFreq+5
+					sC=sC+1
+					if sC>1:
+						sC=0
+						self.sFreq=self.sFreq+5
 
 			
 			self.initPulseTrain()
+
 			self.pulseTrainTrial()
+
 			pyStim.saveTrialData(self)
 			pyStim.updateSessionData(self)
 			self.sesVarD['tDur']=int(self.tDur_tv.get())
@@ -1043,8 +1055,11 @@ class pyStim:
 
 	def pulseTrainTrial(self):
 		
-
+		sampCount=0
+		self.canPlot=1
 		waitSamps=30*int(self.sesVarD['sRate'])
+
+		
 
 		while self.inTrial ==1:
 			
@@ -1118,6 +1133,9 @@ class pyStim:
 					self.resetVariables=1
 					initSt=1					
 
+				if sampCount>int(self.sesVarD['uiUpdateSamps']):
+					pyStim.updatePlotCheck(self)
+					sampCount=0
 
 				if self.txBit==0:
 					self.teensy.write('a1>'.encode('utf-8'))
@@ -1142,6 +1160,8 @@ class pyStim:
 
 					elif self.rxBit==0 and waitCount>waitSamps:
 						self.txBit=0
+
+				sampCount=sampCount+1
 			
 
 			# **************************************
@@ -1150,10 +1170,15 @@ class pyStim:
 			elif self.s == 1:
 				
 				if initSt==0:
+
 					pyStim.updateContrast(self,0,vTrial,tFreq,sFreq,orient)	
 					initSt=1
 				
 				if self.varsSent==0:
+
+					if sampCount>int(self.sesVarD['uiUpdateSamps']):
+						pyStim.updatePlotCheck(self)
+						sampCount=0
 					
 					if self.txBit==0:
 						varCheck=[]
@@ -1171,7 +1196,7 @@ class pyStim:
 							self.teensy.write('{}{}>'.format(tHead,tVal).encode('utf-8'))
 							self.txBit=1
 							waitCount=0
-							pyStim.updatePlotCheck(self)
+							
 
 						if len(varCheck)==0:
 							self.varsSent=1
@@ -1182,10 +1207,11 @@ class pyStim:
 						self.tR,self.rxBit=self.readSerialData(self.teensy,'vars',self.varCount)
 						if self.rxBit:
 							self.txBit=0
-							pyStim.updatePlotCheck(self)
 
 						elif self.rxBit==0 and waitCount>waitSamps:
 							self.txBit=0
+
+					sampCount=sampCount+1
 
 				elif self.varsSent==1 and doneOnce==0:
 					s2Head=0
@@ -1203,50 +1229,67 @@ class pyStim:
 			
 			elif self.s==2:
 				while self.collecting:
+
 					if s2Head==0:
 
 						pyStim.updateContrast(self,90,vTrial,tFreq,sFreq,orient)	
 						s2Head=1
+			
+					
 
 					dR,dU=self.readSerialData(self.teensy,'data',self.dataCount)
 					if dU:
+						
 						n=n+1
-						if n % int(self.sesVarD['uiUpdateSamps']) == 0:
-							pyStim.updatePlotCheck(self)
 						for x in range(0,len(psData.trialStores)):
 							a=(dR[psData.trialStoresIDs[x]])
 							exec('psData.{}.append({})'.format(psData.trialStores[x],a))
-						if n % int(self.sesVarD['uiUpdateSamps']) == 0:
-							pyStim.updatePlotCheck(self)
+			
+							
 						if psData.pS[-1]==0 or n>=int(self.sesVarD['tDur'])*int(self.sesVarD['sRate']):
+			
 							self.collecting=0
 							n=0
+
+						if sampCount>int(self.sesVarD['uiUpdateSamps']) and self.canPlot:
+							pyStim.updatePlotCheck(self)
+							sampCount=0
+					
+						sampCount=sampCount+1
 							
 				
 				while self.collecting==0:
-					if s2Head==1:
 
+					if s2Head==1:
 						pyStim.updateContrast(self,0,vTrial,tFreq,sFreq,orient)	
 						s2Head=0
-					# pyStim.updateContrast(self,0,vTrial,tFreq,sFreq,orient)
+
+					if sampCount>int(self.sesVarD['uiUpdateSamps']):
+						pyStim.updatePlotCheck(self)
+						sampCount=0
+
 					while self.teensy.in_waiting>0:
-						n=n+1
-						if n % int(self.sesVarD['uiUpdateSamps']) == 0:
+						if sampCount>int(self.sesVarD['uiUpdateSamps']):
 							pyStim.updatePlotCheck(self)
-							
+							sampCount=0
+
 						dR,dU=self.readSerialData(self.teensy,'data',self.dataCount)
 						if dU:
 							for x in range(0,len(psData.trialStores)):
 								a=(dR[psData.trialStoresIDs[x]])
 								exec('psData.{}.append({})'.format(psData.trialStores[x],a))
 
+						sampCount=sampCount+1
+
 					if initSt==0:
 						psPlot.updateLastTrialFig(self)
 						initSt=1
-						
+					
+					sampCount=sampCount+1
 					self.contrast=0
 					self.teensy.write('a0>'.encode('utf-8'))
 					self.inTrial ==0
+					
 					return()
 		
 
